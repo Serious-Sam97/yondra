@@ -28,6 +28,13 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Fortify::registerView(function (Request $request) {
+            abort(404);
+        });
+        Fortify::loginView(fn () => abort(404));
+        Fortify::requestPasswordResetLinkView(fn () => abort(404));
+        Fortify::resetPasswordView(fn () => abort(404));
+        Fortify::verifyEmailView(fn () => abort(404));
         Fortify::createUsersUsing(CreateNewUser::class);
         Fortify::updateUserProfileInformationUsing(UpdateUserProfileInformation::class);
         Fortify::updateUserPasswordsUsing(UpdateUserPassword::class);
