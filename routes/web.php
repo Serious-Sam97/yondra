@@ -15,6 +15,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     });
 
     Route::get('/api/boards', [BoardController::class, 'index']);
+    Route::post('/api/boards', [BoardController::class, 'store']);
     Route::get('/api/boards/{boardId}', [BoardController::class, 'show']);
     Route::post('/api/boards/{boardId}/cards', [CardController::class, 'store']);
     Route::put('/api/boards/{boardId}/cards/{cardId}', [CardController::class, 'update']);

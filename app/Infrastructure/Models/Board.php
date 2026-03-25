@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Board extends Model
 {
+    protected $fillable = ['user_id', 'name', 'description'];
+
     public function sections(): HasMany {
         return $this->hasMany(Section::class);
     }

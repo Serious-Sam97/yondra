@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\BoardService;
+use Illuminate\Http\Request;
 
 class BoardController extends Controller
 {
@@ -21,5 +22,17 @@ class BoardController extends Controller
     public function show(int $boardId)
     {
         return $this->boardService->fetchOne($boardId);
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name'        => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+        ]);
+
+        $board = $this->boardService->create($validated);
+
+        return response()->json($board, 201);
     }
 }

@@ -24,5 +24,10 @@ class BoardService
     {
         return $this->boardRepository->show($id);
     }
+
+    public function create(array $data)
+    {
+        return $this->boardRepository->save($data);
+    }
 }
 
