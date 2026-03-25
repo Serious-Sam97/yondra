@@ -6,6 +6,7 @@ namespace App\Infrastructure\Repository;
 
 use App\Domain\Repository\BoardRepository;
 use App\Infrastructure\Models\Board;
+use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\Section;
 use Illuminate\Support\Facades\Auth;
 
@@ -39,6 +40,8 @@ class BoardModelRepository implements BoardRepository {
 	}
 	
 	public function delete($request) {
-		// TODO: Implement delete method
+		Card::where('board_id', $request['id'])->delete();
+		Section::where('board_id', $request['id'])->delete();
+		Board::findOrFail($request['id'])->delete();
 	}
 }

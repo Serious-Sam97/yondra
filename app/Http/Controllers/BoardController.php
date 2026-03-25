@@ -24,6 +24,12 @@ class BoardController extends Controller
         return $this->boardService->fetchOne($boardId);
     }
 
+    public function destroy(int $boardId)
+    {
+        $this->boardService->remove($boardId);
+        return response()->json(null, 204);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([

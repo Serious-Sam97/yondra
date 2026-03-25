@@ -29,5 +29,10 @@ class BoardService
     {
         return $this->boardRepository->save($data);
     }
+
+    public function remove(int $id)
+    {
+        return $this->boardRepository->delete(['id' => $id]);
+    }
 }
 
