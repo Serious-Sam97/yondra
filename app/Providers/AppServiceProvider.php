@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Domain\Repository\BoardRepository;
+use App\Domain\Repository\CardRepository;
 use App\Infrastructure\Repository\BoardModelRepository;
+use App\Infrastructure\Repository\CardModelRepository;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Session\Middleware\StartSession;
@@ -19,6 +21,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(BoardRepository::class, BoardModelRepository::class);
+        $this->app->bind(CardRepository::class, CardModelRepository::class);
     }
 
     /**

@@ -17,4 +17,9 @@ class BoardController extends Controller
     {
         return $this->boardService->fetchAll();
     }
+
+    public function show(int $boardId)
+    {
+        return $this->boardService->fetchOne($boardId);
+    }
 }

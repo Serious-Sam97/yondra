@@ -19,5 +19,10 @@ class BoardService
     {
         return $this->boardRepository->index();
     }
+
+    public function fetchOne($id)
+    {
+        return $this->boardRepository->show($id);
+    }
 }
 

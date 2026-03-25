@@ -13,7 +13,11 @@ class BoardModelRepository implements BoardRepository {
 		$user = Auth::user();
 		return Board::where('user_id', $user->id)->get();
 	}
-	
+
+	public function show($id) {
+		return Board::with(['sections', 'cards'])->findOrFail($id);
+	}
+
 	public function save($request) {
 		// TODO: Implement save method
 	}
