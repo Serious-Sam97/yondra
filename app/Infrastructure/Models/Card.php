@@ -11,10 +11,13 @@ class Card extends Model
 {
     protected $fillable = [
         'board_id', 'section_id', 'assigned_user_id', 'created_by_user_id',
-        'name', 'description', 'due_date', 'priority', 'position',
+        'name', 'description', 'due_date', 'priority', 'position', 'archived_at',
     ];
 
-    protected $casts = ['due_date' => 'date:Y-m-d'];
+    protected $casts = [
+        'due_date'    => 'date:Y-m-d',
+        'archived_at' => 'datetime',
+    ];
 
     public function assignedUser(): BelongsTo   { return $this->belongsTo(User::class, 'assigned_user_id'); }
     public function createdBy(): BelongsTo      { return $this->belongsTo(User::class, 'created_by_user_id'); }

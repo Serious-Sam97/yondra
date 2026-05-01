@@ -69,8 +69,25 @@ class CardController extends Controller
     public function destroy(int $boardId, int $cardId)
     {
         $this->authorizeBoard($boardId);
-        Card::where('board_id', $boardId)->findOrFail($cardId)->delete();
+        Card::where('board_id', $boardId)->findOrFail($cardId)->update(['archived_at' => now()]);
         return response()->json(null, 204);
+    }
+
+    public function restore(int $boardId, int $cardId)
+    {
+        $this->authorizeBoard($boardId);
+        Card::where('board_id', $boardId)->findOrFail($cardId)->update(['archived_at' => null]);
+        return response()->json(null, 204);
+    }
+
+    public function archived(int $boardId)
+    {
+        $this->authorizeBoard($boardId);
+        return Card::where('board_id', $boardId)
+            ->whereNotNull('archived_at')
+            ->with(['tags', 'assignedUser:id,name', 'createdBy:id,name'])
+            ->orderByDesc('archived_at')
+            ->get();
     }
 
     public function reorder(Request $request, int $boardId)

@@ -32,8 +32,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/boards/{boardId}/sections/{sectionId}', [SectionController::class, 'update']);
     Route::delete('/boards/{boardId}/sections/{sectionId}', [SectionController::class, 'destroy']);
     Route::post('/boards/{boardId}/cards', [CardController::class, 'store']);
+    Route::get('/boards/{boardId}/cards/archived', [CardController::class, 'archived']);
     Route::put('/boards/{boardId}/cards/reorder', [CardController::class, 'reorder']);
     Route::put('/boards/{boardId}/cards/{cardId}', [CardController::class, 'update']);
+    Route::put('/boards/{boardId}/cards/{cardId}/restore', [CardController::class, 'restore']);
     Route::delete('/boards/{boardId}/cards/{cardId}', [CardController::class, 'destroy']);
 
     Route::post('/boards/{boardId}/cards/{cardId}/checklist', [CardChecklistController::class, 'store']);

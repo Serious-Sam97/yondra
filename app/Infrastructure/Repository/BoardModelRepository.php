@@ -32,7 +32,7 @@ class BoardModelRepository implements BoardRepository {
     public function show($id) {
         $board = Board::with([
             'sections',
-            'cards' => fn($q) => $q->orderBy('position'),
+            'cards' => fn($q) => $q->whereNull('archived_at')->orderBy('position'),
             'cards.assignedUser:id,name',
             'cards.createdBy:id,name',
             'cards.tags',
