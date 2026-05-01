@@ -22,15 +22,29 @@ class CardCommentController extends Controller
         $comment = CardComment::create(['card_id' => $cardId, 'user_id' => Auth::id(), 'body' => $validated['body']]);
         $comment->load('user:id,name');
 
-        // Notify assigned user if different from commenter
         $card = Card::find($cardId);
-        if ($card && $card->assigned_user_id && $card->assigned_user_id !== Auth::id()) {
-            YondraNotification::create([
-                'user_id'  => $card->assigned_user_id,
-                'board_id' => $boardId,
-                'card_id'  => $cardId,
-                'message'  => Auth::user()->name . ' commented on "' . $card->name . '"',
-            ]);
+        if ($card) {
+            $message = Auth::user()->name . ' commented on "' . $card->name . '"';
+            $notified = collect();
+
+            if ($card->assigned_user_id && $card->assigned_user_id !== Auth::id()) {
+                YondraNotification::create([
+                    'user_id'  => $card->assigned_user_id,
+                    'board_id' => $boardId,
+                    'card_id'  => $cardId,
+                    'message'  => $message,
+                ]);
+                $notified->push($card->assigned_user_id);
+            }
+
+            if ($card->created_by_user_id && $card->created_by_user_id !== Auth::id() && !$notified->contains($card->created_by_user_id)) {
+                YondraNotification::create([
+                    'user_id'  => $card->created_by_user_id,
+                    'board_id' => $boardId,
+                    'card_id'  => $cardId,
+                    'message'  => $message,
+                ]);
+            }
         }
 
         return response()->json($comment, 201);
