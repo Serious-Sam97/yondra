@@ -16,10 +16,17 @@ class BoardModelRepository implements BoardRepository {
     public function index() {
         $user = Auth::user();
 
-        $owned = Board::where('user_id', $user->id)->get();
-        $shared = Board::whereHas('sharedWith', fn($q) => $q->where('users.id', $user->id))->get();
+        $owned = Board::where('user_id', $user->id)
+            ->with(['owner:id,name', 'sharedWith:id,name'])
+            ->withCount('cards')
+            ->get();
 
-        return $owned->merge($shared)->values();
+        $shared = Board::whereHas('sharedWith', fn($q) => $q->where('users.id', $user->id))
+            ->with(['owner:id,name', 'sharedWith:id,name'])
+            ->withCount('cards')
+            ->get();
+
+        return ['owned' => $owned->values(), 'shared' => $shared->values()];
     }
 
     public function show($id) {
