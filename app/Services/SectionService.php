@@ -20,6 +20,11 @@ class SectionService
         return $this->sectionRepository->save($data);
     }
 
+    public function rename(int $id, string $name): mixed
+    {
+        return $this->sectionRepository->update(['id' => $id, 'name' => $name]);
+    }
+
     public function remove(int $id): void
     {
         $this->sectionRepository->delete(['id' => $id]);

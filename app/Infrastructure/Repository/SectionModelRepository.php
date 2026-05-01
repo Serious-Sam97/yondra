@@ -24,7 +24,9 @@ class SectionModelRepository implements SectionRepository
 
     public function update($request)
     {
-        // TODO
+        $section = Section::findOrFail($request['id']);
+        $section->update(['name' => $request['name']]);
+        return $section;
     }
 
     public function delete($request)

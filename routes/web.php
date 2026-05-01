@@ -1,26 +1,7 @@
 <?php
 
-use App\Http\Controllers\BoardController;
-use App\Http\Controllers\CardController;
-use App\Http\Controllers\SectionController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
-});
-
-Route::middleware(['auth:sanctum'])->group(function () {
-    Route::get('/api/user', function (Request $request) {
-        return $request->user();
-    });
-
-    Route::get('/api/boards', [BoardController::class, 'index']);
-    Route::post('/api/boards', [BoardController::class, 'store']);
-    Route::get('/api/boards/{boardId}', [BoardController::class, 'show']);
-    Route::delete('/api/boards/{boardId}', [BoardController::class, 'destroy']);
-    Route::post('/api/boards/{boardId}/sections', [SectionController::class, 'store']);
-    Route::delete('/api/boards/{boardId}/sections/{sectionId}', [SectionController::class, 'destroy']);
-    Route::post('/api/boards/{boardId}/cards', [CardController::class, 'store']);
-    Route::put('/api/boards/{boardId}/cards/{cardId}', [CardController::class, 'update']);
 });
