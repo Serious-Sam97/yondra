@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\BoardEvent;
 use App\Infrastructure\Models\BoardActivity;
 use App\Infrastructure\Models\Card;
 use App\Services\CardService;
@@ -40,6 +41,8 @@ class CardController extends Controller
             'description' => Auth::user()->name . ' created card "' . $validated['name'] . '"',
         ]);
 
+        broadcast(new BoardEvent($boardId, 'card.created', $card));
+
         return response()->json($card, 201);
     }
 
@@ -63,6 +66,8 @@ class CardController extends Controller
             'board_id' => $boardId,
         ]));
 
+        broadcast(new BoardEvent($boardId, 'card.updated', $card));
+
         return response()->json($card);
     }
 
@@ -70,13 +75,17 @@ class CardController extends Controller
     {
         $this->authorizeWrite($boardId);
         Card::where('board_id', $boardId)->findOrFail($cardId)->update(['archived_at' => now()]);
+        broadcast(new BoardEvent($boardId, 'card.deleted', ['id' => $cardId]));
         return response()->json(null, 204);
     }
 
     public function restore(int $boardId, int $cardId)
     {
         $this->authorizeWrite($boardId);
-        Card::where('board_id', $boardId)->findOrFail($cardId)->update(['archived_at' => null]);
+        $card = Card::where('board_id', $boardId)->findOrFail($cardId);
+        $card->update(['archived_at' => null]);
+        $card->load(['tags', 'assignedUser:id,name', 'createdBy:id,name', 'checklistItems']);
+        broadcast(new BoardEvent($boardId, 'card.restored', $card->toArray()));
         return response()->json(null, 204);
     }
 

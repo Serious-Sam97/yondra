@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BoardActivityController;
 use App\Http\Controllers\BoardController;
+use App\Http\Controllers\BoardMessageController;
 use App\Http\Controllers\BoardShareController;
 use App\Http\Controllers\CardChecklistController;
 use App\Http\Controllers\CardCommentController;
@@ -12,7 +13,12 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SectionController;
 use App\Http\Controllers\TagController;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Route;
+
+Route::post('/broadcasting/auth', function (Request $request) {
+    return Broadcast::auth($request);
+})->middleware('auth:sanctum');
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
@@ -48,6 +54,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/boards/{boardId}/cards/{cardId}/comments/{commentId}', [CardCommentController::class, 'destroy']);
 
     Route::get('/boards/{boardId}/activity', [BoardActivityController::class, 'index']);
+
+    Route::get('/boards/{boardId}/messages', [BoardMessageController::class, 'index']);
+    Route::post('/boards/{boardId}/messages', [BoardMessageController::class, 'store']);
+    Route::delete('/boards/{boardId}/messages/{messageId}', [BoardMessageController::class, 'destroy']);
 
     Route::post('/boards/{boardId}/tags', [TagController::class, 'store']);
     Route::delete('/boards/{boardId}/tags/{tagId}', [TagController::class, 'destroy']);

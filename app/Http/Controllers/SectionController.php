@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\BoardEvent;
 use App\Services\SectionService;
 use Illuminate\Http\Request;
 
@@ -18,6 +19,7 @@ class SectionController extends Controller
     {
         $this->authorizeWrite($boardId);
         $this->sectionService->remove($sectionId);
+        broadcast(new BoardEvent($boardId, 'section.deleted', ['id' => $sectionId]));
         return response()->json(null, 204);
     }
 
@@ -29,6 +31,7 @@ class SectionController extends Controller
         ]);
 
         $section = $this->sectionService->rename($sectionId, $validated['name']);
+        broadcast(new BoardEvent($boardId, 'section.updated', (array) $section));
         return response()->json($section);
     }
 
@@ -44,6 +47,7 @@ class SectionController extends Controller
             'name'     => $validated['name'],
         ]);
 
+        broadcast(new BoardEvent($boardId, 'section.created', (array) $section));
         return response()->json($section, 201);
     }
 }
