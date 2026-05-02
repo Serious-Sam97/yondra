@@ -70,7 +70,18 @@ class BoardModelRepository implements BoardRepository {
     }
 
     public function update($request) {
-        // TODO: Implement update method
+        $board = Board::findOrFail($request['id']);
+        $this->authorizeOwner($board);
+
+        $board->update([
+            'name'        => $request['name']        ?? $board->name,
+            'description' => $request['description'] ?? $board->description,
+            'project_id'  => array_key_exists('project_id', $request)
+                                ? $request['project_id']
+                                : $board->project_id,
+        ]);
+
+        return $board->fresh()->load(['owner:id,name', 'sharedWith:id,name'])->loadCount('cards');
     }
 
     public function delete($request) {

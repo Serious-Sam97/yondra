@@ -36,6 +36,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/boards', [BoardController::class, 'index']);
     Route::post('/boards', [BoardController::class, 'store']);
     Route::get('/boards/{boardId}', [BoardController::class, 'show']);
+    Route::put('/boards/{boardId}', [BoardController::class, 'update']);
     Route::delete('/boards/{boardId}', [BoardController::class, 'destroy']);
     Route::post('/boards/{boardId}/sections', [SectionController::class, 'store']);
     Route::put('/boards/{boardId}/sections/{sectionId}', [SectionController::class, 'update']);

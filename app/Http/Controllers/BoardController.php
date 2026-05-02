@@ -38,8 +38,19 @@ class BoardController extends Controller
             'project_id'  => ['nullable', 'integer', 'exists:projects,id'],
         ]);
 
-        $board = $this->boardService->create($validated);
+        return response()->json($this->boardService->create($validated), 201);
+    }
 
-        return response()->json($board, 201);
+    public function update(Request $request, int $boardId)
+    {
+        $validated = $request->validate([
+            'name'        => ['sometimes', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'project_id'  => ['nullable', 'integer', 'exists:projects,id'],
+        ]);
+
+        $validated['id'] = $boardId;
+
+        return $this->boardService->edit($validated);
     }
 }
