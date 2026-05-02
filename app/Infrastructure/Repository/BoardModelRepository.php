@@ -57,6 +57,7 @@ class BoardModelRepository implements BoardRepository {
         $user = Auth::user();
         $board = Board::create([
             'user_id'     => $user->id,
+            'project_id'  => $request['project_id'] ?? null,
             'name'        => $request['name'],
             'description' => $request['description'] ?? '',
         ]);

@@ -9,10 +9,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Board extends Model
 {
-    protected $fillable = ['user_id', 'name', 'description'];
+    protected $fillable = ['user_id', 'project_id', 'name', 'description'];
 
     public function owner(): BelongsTo {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function project(): BelongsTo {
+        return $this->belongsTo(\App\Infrastructure\Models\Project::class);
     }
 
     public function sections(): HasMany {
@@ -32,13 +36,26 @@ class Board extends Model
     }
 
     public function isAccessibleBy(int $userId): bool {
-        return $this->user_id === $userId
-            || $this->sharedWith()->where('users.id', $userId)->exists();
+        if ($this->user_id === $userId) return true;
+        if ($this->sharedWith()->where('users.id', $userId)->exists()) return true;
+        if ($this->project_id) {
+            return \App\Infrastructure\Models\Project::where('id', $this->project_id)
+                ->whereHas('members', fn($q) => $q->where('users.id', $userId))
+                ->exists();
+        }
+        return false;
     }
 
     public function isWritableBy(int $userId): bool {
         if ($this->user_id === $userId) return true;
         $share = $this->sharedWith()->where('users.id', $userId)->first();
-        return $share && $share->pivot->permission === 'write';
+        if ($share) return $share->pivot->permission === 'write';
+        // Project members can write; viewers can only read
+        if ($this->project_id) {
+            $pivot = \App\Infrastructure\Models\Project::find($this->project_id)
+                ?->members()->where('users.id', $userId)->first()?->pivot;
+            return $pivot && $pivot->role === 'member';
+        }
+        return false;
     }
 }

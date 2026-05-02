@@ -10,6 +10,8 @@ use App\Http\Controllers\CardCommentController;
 use App\Http\Controllers\CardController;
 use App\Http\Controllers\CardTemplateController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\ProjectMemberController;
 use App\Http\Controllers\SectionController;
 use App\Http\Controllers\TagController;
 use Illuminate\Http\Request;
@@ -65,6 +67,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/boards/{boardId}/share', [BoardShareController::class, 'store']);
     Route::put('/boards/{boardId}/share/{userId}', [BoardShareController::class, 'update']);
     Route::delete('/boards/{boardId}/share/{userId}', [BoardShareController::class, 'destroy']);
+
+    Route::get('/projects', [ProjectController::class, 'index']);
+    Route::post('/projects', [ProjectController::class, 'store']);
+    Route::get('/projects/{projectId}', [ProjectController::class, 'show']);
+    Route::put('/projects/{projectId}', [ProjectController::class, 'update']);
+    Route::delete('/projects/{projectId}', [ProjectController::class, 'destroy']);
+
+    Route::post('/projects/{projectId}/members', [ProjectMemberController::class, 'store']);
+    Route::put('/projects/{projectId}/members/{userId}', [ProjectMemberController::class, 'update']);
+    Route::delete('/projects/{projectId}/members/{userId}', [ProjectMemberController::class, 'destroy']);
 
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::put('/notifications/{id}/read', [NotificationController::class, 'markRead']);

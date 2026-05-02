@@ -35,6 +35,7 @@ class BoardController extends Controller
         $validated = $request->validate([
             'name'        => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
+            'project_id'  => ['nullable', 'integer', 'exists:projects,id'],
         ]);
 
         $board = $this->boardService->create($validated);
