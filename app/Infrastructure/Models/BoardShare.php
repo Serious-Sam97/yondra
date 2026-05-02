@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class BoardShare extends Model
 {
-    protected $fillable = ['board_id', 'user_id'];
+    protected $fillable = ['board_id', 'user_id', 'permission'];
 
     public function board()
     {

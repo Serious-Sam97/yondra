@@ -26,13 +26,20 @@ class BoardModelRepository implements BoardRepository {
             ->withCount('cards')
             ->get();
 
+        $flattenPermissions = fn($boards) => $boards->each(
+            fn($b) => $b->sharedWith->each(fn($u) => $u->permission = $u->pivot->permission ?? 'write')
+        );
+
+        $flattenPermissions($owned);
+        $flattenPermissions($shared);
+
         return ['owned' => $owned->values(), 'shared' => $shared->values()];
     }
 
     public function show($id) {
         $board = Board::with([
             'sections',
-            'cards' => fn($q) => $q->whereNull('archived_at')->orderBy('position'),
+            'cards' => fn($q) => $q->whereNull('archived_at')->whereNull('parent_card_id')->orderBy('position'),
             'cards.assignedUser:id,name',
             'cards.createdBy:id,name',
             'cards.tags',
@@ -42,6 +49,7 @@ class BoardModelRepository implements BoardRepository {
             'owner:id,name,email',
         ])->findOrFail($id);
         $this->authorizeAccess($board);
+        $board->sharedWith->each(fn($u) => $u->permission = $u->pivot->permission ?? 'write');
         return $board;
     }
 

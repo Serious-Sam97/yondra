@@ -16,14 +16,14 @@ class SectionController extends Controller
 
     public function destroy(int $boardId, int $sectionId)
     {
-        $this->authorizeBoard($boardId);
+        $this->authorizeWrite($boardId);
         $this->sectionService->remove($sectionId);
         return response()->json(null, 204);
     }
 
     public function update(Request $request, int $boardId, int $sectionId)
     {
-        $this->authorizeBoard($boardId);
+        $this->authorizeWrite($boardId);
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
         ]);
@@ -34,7 +34,7 @@ class SectionController extends Controller
 
     public function store(Request $request, int $boardId)
     {
-        $this->authorizeBoard($boardId);
+        $this->authorizeWrite($boardId);
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
         ]);

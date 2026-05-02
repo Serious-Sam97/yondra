@@ -9,7 +9,7 @@ class CardChecklistController extends Controller
 {
     public function store(Request $request, int $boardId, int $cardId)
     {
-        $this->authorizeBoard($boardId);
+        $this->authorizeWrite($boardId);
         $validated = $request->validate(['text' => ['required', 'string', 'max:500']]);
         $position = CardChecklistItem::where('card_id', $cardId)->max('position') + 1;
         $item = CardChecklistItem::create(['card_id' => $cardId, 'text' => $validated['text'], 'position' => $position]);
@@ -18,7 +18,7 @@ class CardChecklistController extends Controller
 
     public function update(Request $request, int $boardId, int $cardId, int $itemId)
     {
-        $this->authorizeBoard($boardId);
+        $this->authorizeWrite($boardId);
         $validated = $request->validate([
             'text'    => ['sometimes', 'string', 'max:500'],
             'is_done' => ['sometimes', 'boolean'],
@@ -30,7 +30,7 @@ class CardChecklistController extends Controller
 
     public function destroy(int $boardId, int $cardId, int $itemId)
     {
-        $this->authorizeBoard($boardId);
+        $this->authorizeWrite($boardId);
         CardChecklistItem::where('card_id', $cardId)->findOrFail($itemId)->delete();
         return response()->json(null, 204);
     }

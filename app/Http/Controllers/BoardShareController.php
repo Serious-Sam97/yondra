@@ -20,7 +20,8 @@ class BoardShareController extends Controller
         }
 
         $request->validate([
-            'email' => ['required', 'email', 'exists:users,email'],
+            'email'      => ['required', 'email', 'exists:users,email'],
+            'permission' => ['sometimes', 'in:read,write'],
         ]);
 
         $user = User::where('email', $request->email)->firstOrFail();
@@ -29,12 +30,33 @@ class BoardShareController extends Controller
             return response()->json(['message' => 'You already own this board.'], 422);
         }
 
-        BoardShare::firstOrCreate([
-            'board_id' => $boardId,
-            'user_id'  => $user->id,
-        ]);
+        $permission = $request->input('permission', 'write');
 
-        return response()->json(['message' => 'Board shared successfully.', 'user' => $user->only('id', 'name', 'email')], 201);
+        BoardShare::updateOrCreate(
+            ['board_id' => $boardId, 'user_id' => $user->id],
+            ['permission' => $permission]
+        );
+
+        return response()->json([
+            'message' => 'Board shared successfully.',
+            'user'    => array_merge($user->only('id', 'name', 'email'), ['permission' => $permission]),
+        ], 201);
+    }
+
+    public function update(Request $request, int $boardId, int $userId)
+    {
+        $board = Board::findOrFail($boardId);
+
+        if ($board->user_id !== Auth::id()) {
+            throw new AccessDeniedHttpException('Only the board owner can manage sharing.');
+        }
+
+        $request->validate(['permission' => ['required', 'in:read,write']]);
+
+        BoardShare::where('board_id', $boardId)->where('user_id', $userId)
+            ->update(['permission' => $request->permission]);
+
+        return response()->json(['permission' => $request->permission]);
     }
 
     public function destroy(int $boardId, int $userId)

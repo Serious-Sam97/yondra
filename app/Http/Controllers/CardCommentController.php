@@ -44,6 +44,28 @@ class CardCommentController extends Controller
                     'card_id'  => $cardId,
                     'message'  => $message,
                 ]);
+                $notified->push($card->created_by_user_id);
+            }
+
+            // Mention detection
+            preg_match_all('/@(\w+)/u', $validated['body'], $matches);
+            if (!empty($matches[1])) {
+                $board = \App\Infrastructure\Models\Board::with(['owner', 'sharedWith'])->find($boardId);
+                $boardUsers = collect([$board->owner])->merge($board->sharedWith)->filter();
+                foreach ($matches[1] as $handle) {
+                    $mentioned = $boardUsers->first(fn($u) =>
+                        strtolower(explode(' ', $u->name)[0]) === strtolower($handle)
+                    );
+                    if ($mentioned && $mentioned->id !== Auth::id() && !$notified->contains($mentioned->id)) {
+                        YondraNotification::create([
+                            'user_id'  => $mentioned->id,
+                            'board_id' => $boardId,
+                            'card_id'  => $cardId,
+                            'message'  => Auth::user()->name . ' mentioned you in "' . $card->name . '"',
+                        ]);
+                        $notified->push($mentioned->id);
+                    }
+                }
             }
         }
 

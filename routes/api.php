@@ -7,6 +7,7 @@ use App\Http\Controllers\BoardShareController;
 use App\Http\Controllers\CardChecklistController;
 use App\Http\Controllers\CardCommentController;
 use App\Http\Controllers\CardController;
+use App\Http\Controllers\CardTemplateController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SectionController;
 use App\Http\Controllers\TagController;
@@ -52,9 +53,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/boards/{boardId}/tags/{tagId}', [TagController::class, 'destroy']);
 
     Route::post('/boards/{boardId}/share', [BoardShareController::class, 'store']);
+    Route::put('/boards/{boardId}/share/{userId}', [BoardShareController::class, 'update']);
     Route::delete('/boards/{boardId}/share/{userId}', [BoardShareController::class, 'destroy']);
 
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::put('/notifications/{id}/read', [NotificationController::class, 'markRead']);
     Route::put('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+
+    Route::get('/boards/{boardId}/templates', [CardTemplateController::class, 'index']);
+    Route::post('/boards/{boardId}/templates', [CardTemplateController::class, 'store']);
+    Route::delete('/boards/{boardId}/templates/{templateId}', [CardTemplateController::class, 'destroy']);
+
+    Route::get('/boards/{boardId}/cards/{cardId}/subtasks', [CardController::class, 'subtasks']);
+    Route::post('/boards/{boardId}/cards/{cardId}/subtasks', [CardController::class, 'storeSubtask']);
+    Route::put('/boards/{boardId}/cards/{cardId}/subtasks/{subtaskId}', [CardController::class, 'updateSubtask']);
 });

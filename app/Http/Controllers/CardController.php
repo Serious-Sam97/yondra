@@ -19,7 +19,7 @@ class CardController extends Controller
 
     public function store(Request $request, int $boardId)
     {
-        $this->authorizeBoard($boardId);
+        $this->authorizeWrite($boardId);
         $validated = $request->validate([
             'section_id'       => ['required', 'integer'],
             'assigned_user_id' => ['nullable', 'integer', 'exists:users,id'],
@@ -45,7 +45,7 @@ class CardController extends Controller
 
     public function update(Request $request, int $boardId, int $cardId)
     {
-        $this->authorizeBoard($boardId);
+        $this->authorizeWrite($boardId);
         $validated = $request->validate([
             'section_id'       => ['sometimes', 'integer'],
             'assigned_user_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
@@ -68,14 +68,14 @@ class CardController extends Controller
 
     public function destroy(int $boardId, int $cardId)
     {
-        $this->authorizeBoard($boardId);
+        $this->authorizeWrite($boardId);
         Card::where('board_id', $boardId)->findOrFail($cardId)->update(['archived_at' => now()]);
         return response()->json(null, 204);
     }
 
     public function restore(int $boardId, int $cardId)
     {
-        $this->authorizeBoard($boardId);
+        $this->authorizeWrite($boardId);
         Card::where('board_id', $boardId)->findOrFail($cardId)->update(['archived_at' => null]);
         return response()->json(null, 204);
     }
@@ -92,7 +92,7 @@ class CardController extends Controller
 
     public function reorder(Request $request, int $boardId)
     {
-        $this->authorizeBoard($boardId);
+        $this->authorizeWrite($boardId);
         $validated = $request->validate([
             'ordered_ids'   => ['required', 'array'],
             'ordered_ids.*' => ['integer'],
@@ -105,5 +105,41 @@ class CardController extends Controller
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    public function subtasks(int $boardId, int $cardId)
+    {
+        $this->authorizeBoard($boardId);
+        return Card::where('board_id', $boardId)
+            ->where('parent_card_id', $cardId)
+            ->whereNull('archived_at')
+            ->orderBy('position')
+            ->get();
+    }
+
+    public function storeSubtask(Request $request, int $boardId, int $cardId)
+    {
+        $this->authorizeWrite($boardId);
+        $validated = $request->validate(['name' => ['required', 'string', 'max:255']]);
+        $position = Card::where('parent_card_id', $cardId)->max('position') + 1;
+        $subtask = Card::create([
+            'board_id'           => $boardId,
+            'section_id'         => Card::find($cardId)->section_id,
+            'parent_card_id'     => $cardId,
+            'name'               => $validated['name'],
+            'description'        => '',
+            'position'           => $position,
+            'created_by_user_id' => Auth::id(),
+        ]);
+        return response()->json($subtask, 201);
+    }
+
+    public function updateSubtask(Request $request, int $boardId, int $cardId, int $subtaskId)
+    {
+        $this->authorizeWrite($boardId);
+        $validated = $request->validate(['is_done' => ['required', 'boolean']]);
+        $subtask = Card::where('board_id', $boardId)->where('parent_card_id', $cardId)->findOrFail($subtaskId);
+        $subtask->update($validated);
+        return response()->json($subtask);
     }
 }

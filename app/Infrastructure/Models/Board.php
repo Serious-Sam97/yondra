@@ -28,11 +28,17 @@ class Board extends Model
     }
 
     public function sharedWith(): BelongsToMany {
-        return $this->belongsToMany(User::class, 'board_shares');
+        return $this->belongsToMany(User::class, 'board_shares')->withPivot('permission');
     }
 
     public function isAccessibleBy(int $userId): bool {
         return $this->user_id === $userId
             || $this->sharedWith()->where('users.id', $userId)->exists();
+    }
+
+    public function isWritableBy(int $userId): bool {
+        if ($this->user_id === $userId) return true;
+        $share = $this->sharedWith()->where('users.id', $userId)->first();
+        return $share && $share->pivot->permission === 'write';
     }
 }

@@ -16,7 +16,7 @@ class TagController extends Controller
 
     public function store(Request $request, int $boardId)
     {
-        $this->authorizeBoard($boardId);
+        $this->authorizeWrite($boardId);
         $validated = $request->validate([
             'name'  => ['required', 'string', 'max:50'],
             'color' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
@@ -33,7 +33,7 @@ class TagController extends Controller
 
     public function destroy(int $boardId, int $tagId)
     {
-        $this->authorizeBoard($boardId);
+        $this->authorizeWrite($boardId);
         $this->tagService->remove($tagId);
         return response()->json(null, 204);
     }
