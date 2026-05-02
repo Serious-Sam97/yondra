@@ -11,13 +11,14 @@ class Card extends Model
 {
     protected $fillable = [
         'board_id', 'section_id', 'assigned_user_id', 'created_by_user_id',
-        'name', 'description', 'due_date', 'priority', 'position', 'archived_at',
+        'name', 'description', 'due_date', 'priority', 'position', 'archived_at', 'done_at',
         'parent_card_id', 'is_done',
     ];
 
     protected $casts = [
         'due_date'    => 'date:Y-m-d',
         'archived_at' => 'datetime',
+        'done_at'     => 'datetime',
         'is_done'     => 'boolean',
     ];
 
