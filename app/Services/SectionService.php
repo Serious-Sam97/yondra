@@ -29,4 +29,9 @@ class SectionService
     {
         $this->sectionRepository->delete(['id' => $id]);
     }
+
+    public function reorder(array $sectionIds): void
+    {
+        $this->sectionRepository->reorder($sectionIds);
+    }
 }

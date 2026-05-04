@@ -35,6 +35,19 @@ class SectionController extends Controller
         return response()->json($section);
     }
 
+    public function reorder(Request $request, int $boardId)
+    {
+        $this->authorizeWrite($boardId);
+        $validated = $request->validate([
+            'section_ids'   => ['required', 'array'],
+            'section_ids.*' => ['integer'],
+        ]);
+
+        $this->sectionService->reorder($validated['section_ids']);
+        broadcast(new BoardEvent($boardId, 'sections.reordered', ['section_ids' => $validated['section_ids']]));
+        return response()->json(null, 204);
+    }
+
     public function store(Request $request, int $boardId)
     {
         $this->authorizeWrite($boardId);

@@ -16,9 +16,11 @@ class SectionModelRepository implements SectionRepository
 
     public function save($request)
     {
+        $nextOrder = Section::where('board_id', $request['board_id'])->max('order') + 1;
         return Section::create([
             'board_id' => $request['board_id'],
             'name'     => $request['name'],
+            'order'    => $nextOrder,
         ]);
     }
 
@@ -34,5 +36,12 @@ class SectionModelRepository implements SectionRepository
         $section = Section::findOrFail($request['id']);
         \App\Infrastructure\Models\Card::where('section_id', $section->id)->delete();
         $section->delete();
+    }
+
+    public function reorder(array $sectionIds): void
+    {
+        foreach ($sectionIds as $order => $id) {
+            Section::where('id', $id)->update(['order' => $order]);
+        }
     }
 }

@@ -62,8 +62,8 @@ class BoardModelRepository implements BoardRepository {
             'description' => $request['description'] ?? '',
         ]);
 
-        foreach (['To Do', 'In Progress', 'Done'] as $sectionName) {
-            Section::create(['board_id' => $board->id, 'name' => $sectionName]);
+        foreach (['To Do', 'In Progress', 'Done'] as $i => $sectionName) {
+            Section::create(['board_id' => $board->id, 'name' => $sectionName, 'order' => $i]);
         }
 
         return $board->load('sections');
