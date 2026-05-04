@@ -14,14 +14,16 @@ return new class extends Migration
         });
 
         // Seed existing sections with their current implicit order (id order per board)
-        DB::statement('
-            UPDATE sections s
-            JOIN (
-                SELECT id, ROW_NUMBER() OVER (PARTITION BY board_id ORDER BY id) - 1 AS rn
-                FROM sections
-            ) ranked ON s.id = ranked.id
-            SET s.order = ranked.rn
-        ');
+        $boardIds = DB::table('sections')->distinct()->pluck('board_id');
+        foreach ($boardIds as $boardId) {
+            $ids = DB::table('sections')
+                ->where('board_id', $boardId)
+                ->orderBy('id')
+                ->pluck('id');
+            foreach ($ids as $index => $id) {
+                DB::table('sections')->where('id', $id)->update(['order' => $index]);
+            }
+        }
     }
 
     public function down(): void
