@@ -9,9 +9,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('sections', function (Blueprint $table) {
-            $table->unsignedInteger('order')->default(0)->after('name');
-        });
+        if (!Schema::hasColumn('sections', 'order')) {
+            Schema::table('sections', function (Blueprint $table) {
+                $table->unsignedInteger('order')->default(0)->after('name');
+            });
+        }
 
         // Seed existing sections with their current implicit order (id order per board)
         $boardIds = DB::table('sections')->distinct()->pluck('board_id');
