@@ -5,7 +5,7 @@ services:
             dockerfile: Dockerfile
             args:
                 WWWGROUP: '${WWWGROUP}'
-        image: 'yondra/backend'
+        image: 'yondra-backend'
         container_name: yondra-backend
         entrypoint: ["/bin/bash", "-c", "chown -R ${WWWUSER} /var/www/html/storage && chmod -R 775 /var/www/html/storage && exec /usr/local/bin/start-container"]
         extra_hosts:
