@@ -19,7 +19,7 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['http://localhost:3000', 'http://localhost:3001', 'https://yondra-thunder.vercel.app'],
+    'allowed_origins' => ['http://localhost:3000', 'http://localhost:3001', 'https://yondra-thunder.vercel.app', 'https://yondra.net'],
 
     'allowed_origins_patterns' => [],
 
