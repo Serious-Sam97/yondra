@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Infrastructure\Models\Project;
 use App\Services\BoardService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class BoardController extends Controller
 {
@@ -38,6 +41,8 @@ class BoardController extends Controller
             'project_id'  => ['nullable', 'integer', 'exists:projects,id'],
         ]);
 
+        $this->authorizeProject($validated['project_id'] ?? null);
+
         return response()->json($this->boardService->create($validated), 201);
     }
 
@@ -49,8 +54,22 @@ class BoardController extends Controller
             'project_id'  => ['nullable', 'integer', 'exists:projects,id'],
         ]);
 
+        $this->authorizeProject($validated['project_id'] ?? null);
+
         $validated['id'] = $boardId;
 
         return $this->boardService->edit($validated);
+    }
+
+    private function authorizeProject(?int $projectId): void
+    {
+        if ($projectId === null) {
+            return;
+        }
+
+        $project = Project::findOrFail($projectId);
+        if (!$project->isAccessibleBy(Auth::id())) {
+            throw new AccessDeniedHttpException();
+        }
     }
 }

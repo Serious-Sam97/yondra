@@ -23,8 +23,8 @@ class TagModelRepository implements TagRepository
         ]);
     }
 
-    public function delete(int $id): void
+    public function delete(int $boardId, int $id): void
     {
-        Tag::findOrFail($id)->delete();
+        Tag::where('board_id', $boardId)->findOrFail($id)->delete();
     }
 }

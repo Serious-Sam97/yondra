@@ -3,7 +3,7 @@ namespace App\Http\Controllers;
 
 use App\Events\BoardEvent;
 use App\Infrastructure\Models\BoardMessage;
-use App\Infrastructure\Models\YondraNotification;
+use App\Services\MentionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -27,27 +27,12 @@ class BoardMessageController extends Controller
         ]);
         $message->load('user:id,name');
 
-        // Mention detection
-        preg_match_all('/@(\w+)/u', $validated['body'], $matches);
-        if (!empty($matches[1])) {
-            $board = \App\Infrastructure\Models\Board::with(['owner', 'sharedWith'])->find($boardId);
-            $boardUsers = collect([$board->owner])->merge($board->sharedWith)->filter();
-            $notified = collect();
-            foreach ($matches[1] as $handle) {
-                $mentioned = $boardUsers->first(fn($u) =>
-                    strtolower(explode(' ', $u->name)[0]) === strtolower($handle)
-                );
-                if ($mentioned && $mentioned->id !== Auth::id() && !$notified->contains($mentioned->id)) {
-                    YondraNotification::create([
-                        'user_id'  => $mentioned->id,
-                        'board_id' => $boardId,
-                        'card_id'  => null,
-                        'message'  => Auth::user()->name . ' mentioned you in board chat',
-                    ]);
-                    $notified->push($mentioned->id);
-                }
-            }
-        }
+        resolve(MentionService::class)->notify(
+            $boardId,
+            null,
+            $validated['body'],
+            Auth::user()->name . ' mentioned you in board chat',
+        );
 
         broadcast(new BoardEvent($boardId, 'message.created', $message->toArray()));
 

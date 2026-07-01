@@ -8,6 +8,8 @@ use App\Infrastructure\Models\Card;
 use App\Services\CardService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class CardController extends Controller
 {
@@ -22,10 +24,10 @@ class CardController extends Controller
     {
         $this->authorizeWrite($boardId);
         $validated = $request->validate([
-            'section_id'       => ['required', 'integer'],
+            'section_id'       => ['required', 'integer', Rule::exists('sections', 'id')->where('board_id', $boardId)],
             'assigned_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'tag_ids'          => ['sometimes', 'array'],
-            'tag_ids.*'        => ['integer', 'exists:tags,id'],
+            'tag_ids.*'        => ['integer', Rule::exists('tags', 'id')->where('board_id', $boardId)],
             'name'             => ['required', 'string', 'max:255'],
             'description'      => ['nullable', 'string'],
             'due_date'         => ['nullable', 'date'],
@@ -50,10 +52,10 @@ class CardController extends Controller
     {
         $this->authorizeWrite($boardId);
         $validated = $request->validate([
-            'section_id'       => ['sometimes', 'integer'],
+            'section_id'       => ['sometimes', 'integer', Rule::exists('sections', 'id')->where('board_id', $boardId)],
             'assigned_user_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
             'tag_ids'          => ['sometimes', 'array'],
-            'tag_ids.*'        => ['integer', 'exists:tags,id'],
+            'tag_ids.*'        => ['integer', Rule::exists('tags', 'id')->where('board_id', $boardId)],
             'name'             => ['sometimes', 'string', 'max:255'],
             'description'      => ['nullable', 'string'],
             'due_date'         => ['nullable', 'date'],
@@ -105,13 +107,15 @@ class CardController extends Controller
         $validated = $request->validate([
             'ordered_ids'   => ['required', 'array'],
             'ordered_ids.*' => ['integer'],
-            'section_id'    => ['required', 'integer'],
+            'section_id'    => ['required', 'integer', Rule::exists('sections', 'id')->where('board_id', $boardId)],
         ]);
 
-        foreach ($validated['ordered_ids'] as $position => $cardId) {
-            Card::where('board_id', $boardId)->where('id', $cardId)
-                ->update(['position' => $position, 'section_id' => $validated['section_id']]);
-        }
+        DB::transaction(function () use ($validated, $boardId) {
+            foreach ($validated['ordered_ids'] as $position => $cardId) {
+                Card::where('board_id', $boardId)->where('id', $cardId)
+                    ->update(['position' => $position, 'section_id' => $validated['section_id']]);
+            }
+        });
 
         return response()->json(['ok' => true]);
     }
@@ -130,11 +134,12 @@ class CardController extends Controller
     {
         $this->authorizeWrite($boardId);
         $validated = $request->validate(['name' => ['required', 'string', 'max:255']]);
-        $position = Card::where('parent_card_id', $cardId)->max('position') + 1;
+        $parent = $this->boardCard($boardId, $cardId);
+        $position = Card::where('parent_card_id', $parent->id)->max('position') + 1;
         $subtask = Card::create([
             'board_id'           => $boardId,
-            'section_id'         => Card::find($cardId)->section_id,
-            'parent_card_id'     => $cardId,
+            'section_id'         => $parent->section_id,
+            'parent_card_id'     => $parent->id,
             'name'               => $validated['name'],
             'description'        => '',
             'position'           => $position,

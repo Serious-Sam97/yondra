@@ -9,5 +9,5 @@ interface SectionRepository {
     public function save($request);
     public function update($request);
     public function delete($request);
-    public function reorder(array $sectionIds): void;
+    public function reorder(int $boardId, array $sectionIds): void;
 }

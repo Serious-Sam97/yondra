@@ -34,7 +34,7 @@ class TagController extends Controller
     public function destroy(int $boardId, int $tagId)
     {
         $this->authorizeWrite($boardId);
-        $this->tagService->remove($tagId);
+        $this->tagService->remove($boardId, $tagId);
         return response()->json(null, 204);
     }
 }

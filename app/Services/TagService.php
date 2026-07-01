@@ -25,8 +25,8 @@ class TagService
         return $this->tagRepository->save($data);
     }
 
-    public function remove(int $id): void
+    public function remove(int $boardId, int $id): void
     {
-        $this->tagRepository->delete($id);
+        $this->tagRepository->delete($boardId, $id);
     }
 }

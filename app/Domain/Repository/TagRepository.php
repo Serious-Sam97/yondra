@@ -8,5 +8,5 @@ interface TagRepository
 {
     public function forBoard(int $boardId): mixed;
     public function save(array $data): mixed;
-    public function delete(int $id): void;
+    public function delete(int $boardId, int $id): void;
 }

@@ -18,7 +18,7 @@ class SectionController extends Controller
     public function destroy(int $boardId, int $sectionId)
     {
         $this->authorizeWrite($boardId);
-        $this->sectionService->remove($sectionId);
+        $this->sectionService->remove($boardId, $sectionId);
         broadcast(new BoardEvent($boardId, 'section.deleted', ['id' => $sectionId]));
         return response()->json(null, 204);
     }
@@ -30,8 +30,8 @@ class SectionController extends Controller
             'name' => ['required', 'string', 'max:255'],
         ]);
 
-        $section = $this->sectionService->rename($sectionId, $validated['name']);
-        broadcast(new BoardEvent($boardId, 'section.updated', (array) $section));
+        $section = $this->sectionService->rename($boardId, $sectionId, $validated['name']);
+        broadcast(new BoardEvent($boardId, 'section.updated', $section->toArray()));
         return response()->json($section);
     }
 
@@ -43,7 +43,7 @@ class SectionController extends Controller
             'section_ids.*' => ['integer'],
         ]);
 
-        $this->sectionService->reorder($validated['section_ids']);
+        $this->sectionService->reorder($boardId, $validated['section_ids']);
         broadcast(new BoardEvent($boardId, 'sections.reordered', ['section_ids' => $validated['section_ids']]));
         return response()->json(null, 204);
     }
@@ -60,7 +60,7 @@ class SectionController extends Controller
             'name'     => $validated['name'],
         ]);
 
-        broadcast(new BoardEvent($boardId, 'section.created', (array) $section));
+        broadcast(new BoardEvent($boardId, 'section.created', $section->toArray()));
         return response()->json($section, 201);
     }
 }
