@@ -15,6 +15,8 @@ use App\Infrastructure\Repository\TagModelRepository;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
@@ -41,5 +43,25 @@ class AppServiceProvider extends ServiceProvider
             VerifyCsrfToken::class,
         ]);
 
+        // Point the password-reset email link at the SPA frontend instead of the API host.
+        ResetPassword::createUrlUsing(function ($user, string $token) {
+            $base = rtrim(config('app.frontend_url'), '/');
+            return $base.'/reset-password?token='.$token.'&email='.urlencode($user->getEmailForPasswordReset());
+        });
+
+        // Custom subject + Yondra-branded HTML for the password-reset email.
+        ResetPassword::toMailUsing(function ($notifiable, string $token) {
+            $base   = rtrim(config('app.frontend_url'), '/');
+            $url    = $base.'/reset-password?token='.$token.'&email='.urlencode($notifiable->getEmailForPasswordReset());
+            $expire = config('auth.passwords.'.config('auth.defaults.passwords').'.expire', 60);
+
+            return (new MailMessage)
+                ->subject('Yondra - Reset Password Notification')
+                ->view('emails.reset-password', [
+                    'url'    => $url,
+                    'expire' => $expire,
+                    'name'   => $notifiable->name ?? null,
+                ]);
+        });
     }
 }

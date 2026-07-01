@@ -54,6 +54,9 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    // SPA frontend origin — used to build password-reset links in emails.
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:3001'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
