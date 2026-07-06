@@ -181,3 +181,106 @@ it('denies a project member write access to an unshared board', function () {
     $this->actingAs($member)->putJson("/api/boards/{$board->id}/cards/{$card->id}", ['name' => 'Hacked'])->assertForbidden();
     expect($card->fresh()->name)->toBe('Task');
 });
+
+// --- Co-owned projects are valid board-move targets -------------------------
+
+it('lists a co-owned project under "owned" so it is a valid board-move target', function () {
+    extract(projectBoardSetup());
+    $coOwner = User::factory()->create();
+    $project->members()->attach($coOwner->id, ['role' => 'owner']);
+
+    $res = $this->actingAs($coOwner)->getJson('/api/projects')->assertOk()->json();
+
+    expect(collect($res['owned'])->pluck('id'))->toContain($project->id);
+    expect(collect($res['member'] ?? [])->pluck('id'))->not->toContain($project->id);
+});
+
+it('lets a co-owner move a board into that co-owned project', function () {
+    extract(projectBoardSetup());
+    $coOwner = User::factory()->create();
+    $project->members()->attach($coOwner->id, ['role' => 'owner']);
+    // A board the co-owner owns elsewhere, moving into the shared project.
+    $their = Board::create(['user_id' => $coOwner->id, 'name' => 'Theirs', 'description' => '']);
+
+    $this->actingAs($coOwner)
+        ->putJson("/api/boards/{$their->id}", ['project_id' => $project->id])
+        ->assertSuccessful();
+
+    expect($their->fresh()->project_id)->toBe($project->id);
+});
+
+// --- The primary owner can never be removed by a co-owner --------------------
+
+it('forbids a co-owner from removing the primary project owner', function () {
+    extract(projectBoardSetup());
+    $coOwner = User::factory()->create();
+    $project->members()->attach($coOwner->id, ['role' => 'owner']);
+
+    $this->actingAs($coOwner)
+        ->deleteJson("/api/projects/{$project->id}/members/{$owner->id}")
+        ->assertStatus(422);
+
+    expect($project->fresh()->members()->where('users.id', $owner->id)->exists())->toBeTrue();
+});
+
+it('lets a co-owner remove a regular member', function () {
+    extract(projectBoardSetup());
+    $coOwner = User::factory()->create();
+    $project->members()->attach($coOwner->id, ['role' => 'owner']);
+    $member = User::factory()->create();
+    $project->members()->attach($member->id, ['role' => 'member']);
+
+    $this->actingAs($coOwner)
+        ->deleteJson("/api/projects/{$project->id}/members/{$member->id}")
+        ->assertNoContent();
+
+    expect($project->fresh()->members()->where('users.id', $member->id)->exists())->toBeFalse();
+});
+
+// --- Only owners manage members; promotion/direct-owner-add work ------------
+
+it('forbids a plain project member from managing members', function () {
+    extract(projectBoardSetup());
+    $member = User::factory()->create();
+    $project->members()->attach($member->id, ['role' => 'member']);
+    $victim = User::factory()->create();
+    $project->members()->attach($victim->id, ['role' => 'member']);
+    $target = User::factory()->create();
+
+    $this->actingAs($member)
+        ->postJson("/api/projects/{$project->id}/members", ['email' => $target->email, 'role' => 'member'])
+        ->assertForbidden();
+    $this->actingAs($member)
+        ->putJson("/api/projects/{$project->id}/members/{$victim->id}", ['role' => 'owner'])
+        ->assertForbidden();
+    $this->actingAs($member)
+        ->deleteJson("/api/projects/{$project->id}/members/{$victim->id}")
+        ->assertForbidden();
+});
+
+it('promotes a member to owner, and the new owner can then manage members', function () {
+    extract(projectBoardSetup());
+    $member = User::factory()->create();
+    $project->members()->attach($member->id, ['role' => 'member']);
+
+    $this->actingAs($owner)
+        ->putJson("/api/projects/{$project->id}/members/{$member->id}", ['role' => 'owner'])
+        ->assertSuccessful();
+    expect($project->fresh()->members()->where('users.id', $member->id)->first()->pivot->role)->toBe('owner');
+
+    $newbie = User::factory()->create();
+    $this->actingAs($member)
+        ->postJson("/api/projects/{$project->id}/members", ['email' => $newbie->email, 'role' => 'member'])
+        ->assertSuccessful();
+});
+
+it('adds a member directly as a co-owner', function () {
+    extract(projectBoardSetup());
+    $coOwner = User::factory()->create();
+
+    $this->actingAs($owner)
+        ->postJson("/api/projects/{$project->id}/members", ['email' => $coOwner->email, 'role' => 'owner'])
+        ->assertSuccessful();
+
+    expect($project->fresh()->members()->where('users.id', $coOwner->id)->first()->pivot->role)->toBe('owner');
+});
