@@ -69,6 +69,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/boards/{boardId}/tags', [TagController::class, 'store']);
     Route::delete('/boards/{boardId}/tags/{tagId}', [TagController::class, 'destroy']);
 
+    Route::get('/boards/{boardId}/share/candidates', [BoardShareController::class, 'candidates']);
     Route::post('/boards/{boardId}/share', [BoardShareController::class, 'store']);
     Route::put('/boards/{boardId}/share/{userId}', [BoardShareController::class, 'update']);
     Route::delete('/boards/{boardId}/share/{userId}', [BoardShareController::class, 'destroy']);

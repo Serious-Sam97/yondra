@@ -19,7 +19,7 @@ class ProjectMemberController extends Controller
     {
         $validated = $request->validate([
             'email' => ['required', 'email', 'exists:users,email'],
-            'role'  => ['nullable', 'in:member,viewer'],
+            'role'  => ['nullable', 'in:owner,member,viewer'],
         ]);
 
         $user = User::where('email', $validated['email'])->firstOrFail();
@@ -31,7 +31,7 @@ class ProjectMemberController extends Controller
     public function update(Request $request, int $projectId, int $userId)
     {
         $validated = $request->validate([
-            'role' => ['required', 'in:member,viewer'],
+            'role' => ['required', 'in:owner,member,viewer'],
         ]);
 
         return $this->service->updateMember($projectId, $userId, $validated['role']);

@@ -23,12 +23,17 @@ class ProjectModelRepository implements ProjectRepository
             'boards' => fn($q) => $q->withCount('cards')->with(['owner:id,name', 'sharedWith:id,name']),
         ];
 
-        $owned = Project::where('owner_id', $userId)
+        // "Owned" = you are the primary owner OR carry the 'owner' pivot role (co-owner).
+        $owned = Project::where(fn($q) => $q
+                ->where('owner_id', $userId)
+                ->orWhereHas('members', fn($m) => $m->where('users.id', $userId)->where('role', 'owner')))
             ->with($eagerLoad)
             ->withCount('boards')
             ->get();
 
-        $member = Project::where('owner_id', '!=', $userId)
+        $ownedIds = $owned->pluck('id');
+
+        $member = Project::whereNotIn('id', $ownedIds)
             ->whereHas('members', fn($q) => $q->where('users.id', $userId))
             ->with($eagerLoad)
             ->withCount('boards')
@@ -39,6 +44,10 @@ class ProjectModelRepository implements ProjectRepository
             $p->members->each(fn($u) => $u->role = $u->pivot->role);
         });
 
+        // Project owners see every board; non-owner members only see boards
+        // they own or are shared onto.
+        $member->each(fn($p) => $this->restrictBoardsForMember($p, $userId));
+
         $flattenSharedWith($owned);
         $flattenSharedWith($member);
 
@@ -47,6 +56,8 @@ class ProjectModelRepository implements ProjectRepository
 
     public function show(int $id)
     {
+        $userId = Auth::id();
+
         $project = Project::with([
             'owner:id,name,email',
             'members:id,name,email',
@@ -57,7 +68,33 @@ class ProjectModelRepository implements ProjectRepository
 
         $project->members->each(fn($u) => $u->role = $u->pivot->role);
 
+        // Non-owner members only see boards they own or are shared onto.
+        if (!$project->isOwnedBy($userId)) {
+            $this->restrictBoardsForMember($project, $userId);
+        }
+
+        // show() doesn't withCount('boards'); keep boards_count in sync with the
+        // boards actually returned so clients don't read a stale/absent count.
+        $project->boards_count = $project->boards->count();
+
+        $project->boards->each(fn($b) => $b->sharedWith->each(fn($u) => $u->permission = $u->pivot->permission ?? 'write'));
+
         return $project;
+    }
+
+    /**
+     * Drop boards the given user has no direct access to (not the board owner,
+     * not shared onto it) and recount, so a project member never sees boards
+     * that were never shared with them.
+     */
+    private function restrictBoardsForMember(Project $project, int $userId): void
+    {
+        $accessible = $project->boards
+            ->filter(fn($b) => $b->user_id === $userId || $b->sharedWith->contains(fn($u) => $u->id === $userId))
+            ->values();
+
+        $project->setRelation('boards', $accessible);
+        $project->boards_count = $accessible->count();
     }
 
     public function save(array $request)
@@ -119,6 +156,11 @@ class ProjectModelRepository implements ProjectRepository
     {
         $project = Project::findOrFail($projectId);
         $this->authorizeOwner($project);
+
+        // The primary owner (creator) must always remain an owner.
+        if ($userId === $project->owner_id && $role !== 'owner') {
+            abort(422, 'Cannot change the primary owner\'s role.');
+        }
 
         $project->members()->updateExistingPivot($userId, ['role' => $role]);
 

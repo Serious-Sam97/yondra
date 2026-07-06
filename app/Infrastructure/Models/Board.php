@@ -38,10 +38,11 @@ class Board extends Model
     public function isAccessibleBy(int $userId): bool {
         if ($this->user_id === $userId) return true;
         if ($this->sharedWith()->where('users.id', $userId)->exists()) return true;
+        // Only project OWNERS keep implicit access to every board; plain
+        // members/viewers must be shared onto a board to see it.
         if ($this->project_id) {
-            return \App\Infrastructure\Models\Project::where('id', $this->project_id)
-                ->whereHas('members', fn($q) => $q->where('users.id', $userId))
-                ->exists();
+            $project = \App\Infrastructure\Models\Project::find($this->project_id);
+            return $project ? $project->isOwnedBy($userId) : false;
         }
         return false;
     }
@@ -49,13 +50,25 @@ class Board extends Model
     public function isWritableBy(int $userId): bool {
         if ($this->user_id === $userId) return true;
         $share = $this->sharedWith()->where('users.id', $userId)->first();
-        if ($share) return $share->pivot->permission === 'write';
-        // Project members can write; viewers can only read
+        if ($share) return in_array($share->pivot->permission, ['write', 'owner'], true);
+        // Project owners can write to any board; members/viewers get no
+        // implicit board access.
         if ($this->project_id) {
-            $pivot = \App\Infrastructure\Models\Project::find($this->project_id)
-                ?->members()->where('users.id', $userId)->first()?->pivot;
-            return $pivot && $pivot->role === 'member';
+            $project = \App\Infrastructure\Models\Project::find($this->project_id);
+            return $project ? $project->isOwnedBy($userId) : false;
         }
         return false;
+    }
+
+    /**
+     * A board owner is the creator (user_id) or any collaborator whose share
+     * carries the 'owner' permission. Owners can manage sharing and delete.
+     */
+    public function isOwnedBy(int $userId): bool {
+        if ($this->user_id === $userId) return true;
+        return $this->sharedWith()
+            ->where('users.id', $userId)
+            ->wherePivot('permission', 'owner')
+            ->exists();
     }
 }

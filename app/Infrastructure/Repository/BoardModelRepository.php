@@ -100,7 +100,7 @@ class BoardModelRepository implements BoardRepository {
     }
 
     private function authorizeOwner(Board $board): void {
-        if ($board->user_id !== Auth::id()) {
+        if (!$board->isOwnedBy(Auth::id())) {
             throw new AccessDeniedHttpException();
         }
     }

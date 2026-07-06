@@ -34,6 +34,14 @@ class Project extends Model
 
     public function isOwnedBy(int $userId): bool
     {
-        return $this->owner_id === $userId;
+        if ($this->owner_id === $userId) {
+            return true;
+        }
+
+        // Co-owners are project members carrying the 'owner' pivot role.
+        return $this->members()
+            ->where('users.id', $userId)
+            ->wherePivot('role', 'owner')
+            ->exists();
     }
 }

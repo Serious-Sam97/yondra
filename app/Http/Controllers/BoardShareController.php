@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\BoardShare;
+use App\Infrastructure\Models\Project;
 use App\Infrastructure\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -11,20 +12,63 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class BoardShareController extends Controller
 {
+    /**
+     * List members of the board's parent project so the owner can grant board
+     * access by picking from the roster instead of retyping emails. Each entry
+     * is annotated with whether that user already has the board shared to them.
+     */
+    public function candidates(int $boardId)
+    {
+        $board = Board::findOrFail($boardId);
+
+        if (!$board->isOwnedBy(Auth::id())) {
+            throw new AccessDeniedHttpException('Only a board owner can manage sharing.');
+        }
+
+        if (!$board->project_id) {
+            return response()->json([]);
+        }
+
+        $project = Project::with('members:id,name,email')->find($board->project_id);
+
+        if (!$project) {
+            return response()->json([]);
+        }
+
+        $shared = BoardShare::where('board_id', $boardId)->pluck('permission', 'user_id');
+
+        $members = $project->members
+            ->reject(fn ($u) => $u->id === $board->user_id) // owner already has full access
+            ->map(fn ($u) => [
+                'id'         => $u->id,
+                'name'       => $u->name,
+                'email'      => $u->email,
+                'role'       => $u->pivot->role,
+                'shared'     => $shared->has($u->id),
+                'permission' => $shared->get($u->id),
+            ])
+            ->values();
+
+        return response()->json($members);
+    }
+
     public function store(Request $request, int $boardId)
     {
         $board = Board::findOrFail($boardId);
 
-        if ($board->user_id !== Auth::id()) {
-            throw new AccessDeniedHttpException('Only the board owner can share it.');
+        if (!$board->isOwnedBy(Auth::id())) {
+            throw new AccessDeniedHttpException('Only a board owner can share it.');
         }
 
         $request->validate([
-            'email'      => ['required', 'email', 'exists:users,email'],
-            'permission' => ['sometimes', 'in:read,write'],
+            'email'      => ['required_without:user_id', 'email', 'exists:users,email'],
+            'user_id'    => ['required_without:email', 'integer', 'exists:users,id'],
+            'permission' => ['sometimes', 'in:read,write,owner'],
         ]);
 
-        $user = User::where('email', $request->email)->firstOrFail();
+        $user = $request->filled('user_id')
+            ? User::findOrFail($request->integer('user_id'))
+            : User::where('email', $request->email)->firstOrFail();
 
         if ($user->id === Auth::id()) {
             return response()->json(['message' => 'You already own this board.'], 422);
@@ -47,11 +91,11 @@ class BoardShareController extends Controller
     {
         $board = Board::findOrFail($boardId);
 
-        if ($board->user_id !== Auth::id()) {
-            throw new AccessDeniedHttpException('Only the board owner can manage sharing.');
+        if (!$board->isOwnedBy(Auth::id())) {
+            throw new AccessDeniedHttpException('Only a board owner can manage sharing.');
         }
 
-        $request->validate(['permission' => ['required', 'in:read,write']]);
+        $request->validate(['permission' => ['required', 'in:read,write,owner']]);
 
         BoardShare::where('board_id', $boardId)->where('user_id', $userId)
             ->update(['permission' => $request->permission]);
@@ -63,8 +107,8 @@ class BoardShareController extends Controller
     {
         $board = Board::findOrFail($boardId);
 
-        if ($board->user_id !== Auth::id()) {
-            throw new AccessDeniedHttpException('Only the board owner can manage sharing.');
+        if (!$board->isOwnedBy(Auth::id())) {
+            throw new AccessDeniedHttpException('Only a board owner can manage sharing.');
         }
 
         BoardShare::where('board_id', $boardId)->where('user_id', $userId)->delete();
