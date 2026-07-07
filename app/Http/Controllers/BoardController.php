@@ -29,6 +29,7 @@ class BoardController extends Controller
 
     public function destroy(int $boardId)
     {
+        $this->authorizeManage($boardId);
         $this->boardService->remove($boardId);
         return response()->json(null, 204);
     }

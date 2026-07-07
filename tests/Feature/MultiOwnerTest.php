@@ -284,3 +284,73 @@ it('adds a member directly as a co-owner', function () {
 
     expect($project->fresh()->members()->where('users.id', $coOwner->id)->first()->pivot->role)->toBe('owner');
 });
+
+// --- Project owner with a lower board share (board 8 "Parliamo" scenario) ------
+// A friend's board is moved into a project the user owns, and the user also holds a
+// read-only share on that board. Project ownership must win over the read share.
+
+it('lets a project owner reorder cards on a project board where they only have a read share', function () {
+    extract(projectBoardSetup());
+    $friend = User::factory()->create();
+    // The board is created by the friend, inside the project the owner owns.
+    $friendBoard = Board::create(['user_id' => $friend->id, 'project_id' => $project->id, 'name' => 'Parliamo', 'description' => '']);
+    $todo = Section::create(['board_id' => $friendBoard->id, 'name' => 'To Do']);
+    $done = Section::create(['board_id' => $friendBoard->id, 'name' => 'Done']);
+    $card = Card::create(['board_id' => $friendBoard->id, 'section_id' => $todo->id, 'name' => 'C', 'description' => '', 'position' => 0]);
+    // Owner also has a read-only share on it — this used to force read-only.
+    BoardShare::create(['board_id' => $friendBoard->id, 'user_id' => $owner->id, 'permission' => 'read']);
+
+    $this->actingAs($owner)
+        ->putJson("/api/boards/{$friendBoard->id}/cards/reorder", ['section_id' => $done->id, 'ordered_ids' => [$card->id]])
+        ->assertOk();
+
+    expect($card->fresh()->section_id)->toBe($done->id);
+});
+
+it('lets a project owner manage sharing on a project board despite only a read share', function () {
+    extract(projectBoardSetup());
+    $friend = User::factory()->create();
+    $friendBoard = Board::create(['user_id' => $friend->id, 'project_id' => $project->id, 'name' => 'Parliamo', 'description' => '']);
+    BoardShare::create(['board_id' => $friendBoard->id, 'user_id' => $owner->id, 'permission' => 'read']);
+    $invitee = User::factory()->create();
+
+    $this->actingAs($owner)
+        ->postJson("/api/boards/{$friendBoard->id}/share", ['user_id' => $invitee->id, 'permission' => 'write'])
+        ->assertCreated();
+
+    // And the board payload should report the project owner's elevated capabilities.
+    $this->actingAs($owner)
+        ->getJson("/api/boards/{$friendBoard->id}")
+        ->assertOk()
+        ->assertJsonFragment(['can_write' => true])
+        ->assertJsonFragment(['can_manage' => true]);
+});
+
+it('lets a project owner reorder cards after a board is moved into the project by its creator', function () {
+    extract(projectBoardSetup()); // $owner owns $project
+    $friend = User::factory()->create();
+    // Friend must be a project member to move a board into the project.
+    $project->members()->attach($friend->id, ['role' => 'member']);
+
+    // Friend creates their OWN board, initially outside the project.
+    $friendBoard = Board::create(['user_id' => $friend->id, 'name' => 'Parliamo', 'description' => '']);
+    $todo = Section::create(['board_id' => $friendBoard->id, 'name' => 'To Do']);
+    $done = Section::create(['board_id' => $friendBoard->id, 'name' => 'Done']);
+    $card = Card::create(['board_id' => $friendBoard->id, 'section_id' => $todo->id, 'name' => 'C', 'description' => '', 'position' => 0]);
+
+    // Friend MOVES the board into the owner's project.
+    $this->actingAs($friend)
+        ->putJson("/api/boards/{$friendBoard->id}", ['project_id' => $project->id])
+        ->assertSuccessful();
+    expect($friendBoard->fresh()->project_id)->toBe($project->id);
+
+    // Owner is later given a read-only share — the exact condition that used to force read-only.
+    BoardShare::create(['board_id' => $friendBoard->id, 'user_id' => $owner->id, 'permission' => 'read']);
+
+    // The project owner can now move a card on the moved-in board.
+    $this->actingAs($owner)
+        ->putJson("/api/boards/{$friendBoard->id}/cards/reorder", ['section_id' => $done->id, 'ordered_ids' => [$card->id]])
+        ->assertOk();
+
+    expect($card->fresh()->section_id)->toBe($done->id);
+});

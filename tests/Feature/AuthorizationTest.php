@@ -1,6 +1,7 @@
 <?php
 
 use App\Infrastructure\Models\Board;
+use App\Infrastructure\Models\BoardShare;
 use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\CardChecklistItem;
 use App\Infrastructure\Models\CardComment;
@@ -181,4 +182,53 @@ it('allows a project member to create a board in that project', function () {
         ->assertCreated();
 
     expect(Board::where('project_id', $project->id)->count())->toBe(1);
+});
+
+// --- Board deletion is owner-only -------------------------------------------
+
+it('rejects deleting a board you only have a read/write share on', function () {
+    $owner  = User::factory()->create();
+    $board  = Board::create(['user_id' => $owner->id, 'name' => 'Keep me', 'description' => '']);
+    $reader = User::factory()->create();
+    $writer = User::factory()->create();
+    BoardShare::create(['board_id' => $board->id, 'user_id' => $reader->id, 'permission' => 'read']);
+    BoardShare::create(['board_id' => $board->id, 'user_id' => $writer->id, 'permission' => 'write']);
+
+    $this->actingAs($reader)->deleteJson("/api/boards/{$board->id}")->assertForbidden();
+    $this->actingAs($writer)->deleteJson("/api/boards/{$board->id}")->assertForbidden();
+
+    expect(Board::whereKey($board->id)->exists())->toBeTrue();
+});
+
+it('rejects deleting a board you have no access to', function () {
+    $owner   = User::factory()->create();
+    $board   = Board::create(['user_id' => $owner->id, 'name' => 'Private', 'description' => '']);
+    $stranger = User::factory()->create();
+
+    $this->actingAs($stranger)->deleteJson("/api/boards/{$board->id}")->assertForbidden();
+    expect(Board::whereKey($board->id)->exists())->toBeTrue();
+});
+
+it('lets the board creator, an owner-sharer, and the project owner delete', function () {
+    // creator
+    $creator = User::factory()->create();
+    $b1 = Board::create(['user_id' => $creator->id, 'name' => 'A', 'description' => '']);
+    $this->actingAs($creator)->deleteJson("/api/boards/{$b1->id}")->assertNoContent();
+
+    // 'owner' share
+    $owner = User::factory()->create();
+    $coOwner = User::factory()->create();
+    $b2 = Board::create(['user_id' => $owner->id, 'name' => 'B', 'description' => '']);
+    BoardShare::create(['board_id' => $b2->id, 'user_id' => $coOwner->id, 'permission' => 'owner']);
+    $this->actingAs($coOwner)->deleteJson("/api/boards/{$b2->id}")->assertNoContent();
+
+    // project owner deleting a friend's board inside their project
+    $projOwner = User::factory()->create();
+    $project = Project::create(['owner_id' => $projOwner->id, 'name' => 'P', 'description' => '']);
+    $project->members()->attach($projOwner->id, ['role' => 'owner']);
+    $friend = User::factory()->create();
+    $b3 = Board::create(['user_id' => $friend->id, 'project_id' => $project->id, 'name' => 'C', 'description' => '']);
+    $this->actingAs($projOwner)->deleteJson("/api/boards/{$b3->id}")->assertNoContent();
+
+    expect(Board::whereIn('id', [$b1->id, $b2->id, $b3->id])->count())->toBe(0);
 });

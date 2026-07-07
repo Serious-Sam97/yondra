@@ -46,4 +46,19 @@ abstract class Controller
 
         return $board;
     }
+
+    /**
+     * Owner-level actions (delete, manage sharing). Allows the board creator, an
+     * 'owner' share, or a project owner — see Board::isOwnedBy.
+     */
+    protected function authorizeManage(int $boardId): Board
+    {
+        $board = Board::findOrFail($boardId);
+
+        if (!$board->isOwnedBy(Auth::id())) {
+            throw new AccessDeniedHttpException();
+        }
+
+        return $board;
+    }
 }

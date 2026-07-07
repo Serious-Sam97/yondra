@@ -50,6 +50,11 @@ class BoardModelRepository implements BoardRepository {
         ])->findOrFail($id);
         $this->authorizeAccess($board);
         $board->sharedWith->each(fn($u) => $u->permission = $u->pivot->permission ?? 'write');
+        // Expose the current user's capabilities so the client can gate editing/managing
+        // without re-deriving the (project-aware) permission rules.
+        $uid = Auth::id();
+        $board->can_write  = $board->isWritableBy($uid);
+        $board->can_manage = $board->isOwnedBy($uid);
         return $board;
     }
 

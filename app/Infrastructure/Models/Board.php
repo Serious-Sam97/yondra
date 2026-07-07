@@ -35,37 +35,41 @@ class Board extends Model
         return $this->belongsToMany(User::class, 'board_shares')->withPivot('permission');
     }
 
+    /**
+     * True when the user owns (or co-owns) the project this board belongs to.
+     * Project owners get implicit full control over every board in the project,
+     * regardless of any lower-level board share they may also hold.
+     */
+    public function isProjectOwner(int $userId): bool {
+        if (!$this->project_id) return false;
+        $project = \App\Infrastructure\Models\Project::find($this->project_id);
+        return $project ? $project->isOwnedBy($userId) : false;
+    }
+
     public function isAccessibleBy(int $userId): bool {
         if ($this->user_id === $userId) return true;
-        if ($this->sharedWith()->where('users.id', $userId)->exists()) return true;
-        // Only project OWNERS keep implicit access to every board; plain
-        // members/viewers must be shared onto a board to see it.
-        if ($this->project_id) {
-            $project = \App\Infrastructure\Models\Project::find($this->project_id);
-            return $project ? $project->isOwnedBy($userId) : false;
-        }
-        return false;
+        if ($this->isProjectOwner($userId)) return true;
+        // Plain project members/viewers must be shared onto a board to see it.
+        return $this->sharedWith()->where('users.id', $userId)->exists();
     }
 
     public function isWritableBy(int $userId): bool {
         if ($this->user_id === $userId) return true;
+        // Check project ownership BEFORE any share: a project owner who also holds
+        // a read-only board share must still be able to write.
+        if ($this->isProjectOwner($userId)) return true;
         $share = $this->sharedWith()->where('users.id', $userId)->first();
         if ($share) return in_array($share->pivot->permission, ['write', 'owner'], true);
-        // Project owners can write to any board; members/viewers get no
-        // implicit board access.
-        if ($this->project_id) {
-            $project = \App\Infrastructure\Models\Project::find($this->project_id);
-            return $project ? $project->isOwnedBy($userId) : false;
-        }
         return false;
     }
 
     /**
-     * A board owner is the creator (user_id) or any collaborator whose share
-     * carries the 'owner' permission. Owners can manage sharing and delete.
+     * A board owner is the creator (user_id), a project owner, or any collaborator
+     * whose share carries the 'owner' permission. Owners can manage sharing and delete.
      */
     public function isOwnedBy(int $userId): bool {
         if ($this->user_id === $userId) return true;
+        if ($this->isProjectOwner($userId)) return true;
         return $this->sharedWith()
             ->where('users.id', $userId)
             ->wherePivot('permission', 'owner')
