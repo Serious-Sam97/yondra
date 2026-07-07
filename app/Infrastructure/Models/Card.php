@@ -26,6 +26,7 @@ class Card extends Model
     public function createdBy(): BelongsTo      { return $this->belongsTo(User::class, 'created_by_user_id'); }
     public function tags(): BelongsToMany       { return $this->belongsToMany(Tag::class, 'card_tag'); }
     public function checklistItems(): HasMany   { return $this->hasMany(CardChecklistItem::class)->orderBy('position'); }
+    public function images(): HasMany           { return $this->hasMany(CardImage::class)->orderBy('position'); }
     public function comments(): HasMany         { return $this->hasMany(CardComment::class)->latest(); }
     public function subtasks(): HasMany         { return $this->hasMany(Card::class, 'parent_card_id'); }
     public function parent(): BelongsTo         { return $this->belongsTo(Card::class, 'parent_card_id'); }

@@ -44,6 +44,7 @@ class BoardModelRepository implements BoardRepository {
             'cards.createdBy:id,name',
             'cards.tags',
             'cards.checklistItems',
+            'cards.images',
             'tags',
             'sharedWith:id,name,email',
             'owner:id,name,email',

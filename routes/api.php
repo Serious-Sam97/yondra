@@ -8,6 +8,8 @@ use App\Http\Controllers\BoardShareController;
 use App\Http\Controllers\CardChecklistController;
 use App\Http\Controllers\CardCommentController;
 use App\Http\Controllers\CardController;
+use App\Http\Controllers\CardImageController;
+use App\Http\Controllers\ImageUploadController;
 use App\Http\Controllers\CardTemplateController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProjectController;
@@ -59,6 +61,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/boards/{boardId}/cards/{cardId}/comments', [CardCommentController::class, 'index']);
     Route::post('/boards/{boardId}/cards/{cardId}/comments', [CardCommentController::class, 'store']);
     Route::delete('/boards/{boardId}/cards/{cardId}/comments/{commentId}', [CardCommentController::class, 'destroy']);
+
+    Route::post('/boards/{boardId}/cards/{cardId}/attachments', [CardImageController::class, 'store']);
+    Route::delete('/boards/{boardId}/cards/{cardId}/attachments/{imageId}', [CardImageController::class, 'destroy']);
+
+    // Board-scoped inline-image upload for rich-text (works before a card exists).
+    Route::post('/boards/{boardId}/uploads', [ImageUploadController::class, 'store']);
 
     Route::get('/boards/{boardId}/activity', [BoardActivityController::class, 'index']);
 
