@@ -50,12 +50,19 @@ class BoardController extends Controller
     public function update(Request $request, int $boardId)
     {
         $validated = $request->validate([
-            'name'        => ['sometimes', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'project_id'  => ['nullable', 'integer', 'exists:projects,id'],
+            'name'          => ['sometimes', 'string', 'max:255'],
+            'description'   => ['nullable', 'string'],
+            'project_id'    => ['nullable', 'integer', 'exists:projects,id'],
+            'ticket_prefix' => ['sometimes', 'nullable', 'string', 'max:10'],
         ]);
 
         $this->authorizeProject($validated['project_id'] ?? null);
+
+        if (array_key_exists('ticket_prefix', $validated)) {
+            // Normalize to an uppercase, whitespace-free code; blank means "no prefix".
+            $prefix = strtoupper(preg_replace('/\s+/', '', (string) $validated['ticket_prefix']));
+            $validated['ticket_prefix'] = $prefix === '' ? null : $prefix;
+        }
 
         $validated['id'] = $boardId;
 

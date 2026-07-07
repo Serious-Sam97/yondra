@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Board extends Model
 {
-    protected $fillable = ['user_id', 'project_id', 'name', 'description'];
+    protected $fillable = ['user_id', 'project_id', 'name', 'description', 'ticket_prefix'];
 
     public function owner(): BelongsTo {
         return $this->belongsTo(User::class, 'user_id');

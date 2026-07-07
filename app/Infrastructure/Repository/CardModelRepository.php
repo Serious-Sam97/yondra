@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Infrastructure\Repository;
 
 use App\Domain\Repository\CardRepository;
+use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\Section;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class CardModelRepository implements CardRepository
 {
@@ -18,24 +20,42 @@ class CardModelRepository implements CardRepository
 
     public function save($request)
     {
-        $position = Card::where('section_id', $request['section_id'])->max('position') + 1;
-        $card = Card::create([
-            'board_id'           => $request['board_id'],
-            'section_id'         => $request['section_id'],
-            'assigned_user_id'   => $request['assigned_user_id'] ?? null,
-            'created_by_user_id' => Auth::id(),
-            'name'               => $request['name'],
-            'description'        => $request['description'] ?? '',
-            'due_date'           => $request['due_date'] ?? null,
-            'priority'           => $request['priority'] ?? null,
-            'position'           => $position,
-        ]);
+        return DB::transaction(function () use ($request) {
+            // Lock the board row so concurrent creates each get a distinct number.
+            $board = Board::whereKey($request['board_id'])->lockForUpdate()->firstOrFail();
+            $ticketNumber = $board->next_ticket_number;
+            $board->increment('next_ticket_number');
 
-        if (!empty($request['tag_ids'])) {
-            $card->tags()->sync($request['tag_ids']);
+            $position = Card::where('section_id', $request['section_id'])->max('position') + 1;
+            $card = Card::create([
+                'board_id'           => $request['board_id'],
+                'section_id'         => $request['section_id'],
+                'assigned_user_id'   => $request['assigned_user_id'] ?? null,
+                'created_by_user_id' => Auth::id(),
+                'name'               => $request['name'],
+                'description'        => $request['description'] ?? '',
+                'due_date'           => $request['due_date'] ?? null,
+                'priority'           => $request['priority'] ?? null,
+                'position'           => $position,
+                'ticket_number'      => $ticketNumber,
+            ]);
+
+            if (!empty($request['tag_ids'])) {
+                $card->tags()->sync($request['tag_ids']);
+            }
+
+            $card->ticket_key = self::composeTicketKey($board->ticket_prefix, $ticketNumber);
+            return $card->load(['assignedUser:id,name', 'createdBy:id,name', 'tags'])->toArray();
+        });
+    }
+
+    /** Human-facing card key: "YON-42" when a prefix is set, else "#42". */
+    public static function composeTicketKey(?string $prefix, ?int $number): string
+    {
+        if ($number === null) {
+            return '';
         }
-
-        return $card->load(['assignedUser:id,name', 'createdBy:id,name', 'tags'])->toArray();
+        return $prefix ? "{$prefix}-{$number}" : "#{$number}";
     }
 
     public function update($request)
@@ -71,7 +91,10 @@ class CardModelRepository implements CardRepository
             $card->tags()->sync($request['tag_ids'] ?? []);
         }
 
-        return $card->fresh()->load(['assignedUser:id,name', 'createdBy:id,name', 'tags'])->toArray();
+        $fresh = $card->fresh()->load(['assignedUser:id,name', 'createdBy:id,name', 'tags']);
+        $board = Board::find($fresh->board_id);
+        $fresh->ticket_key = self::composeTicketKey($board?->ticket_prefix, $fresh->ticket_number);
+        return $fresh->toArray();
     }
 
     public function delete($request)

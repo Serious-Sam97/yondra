@@ -12,7 +12,7 @@ class Card extends Model
     protected $fillable = [
         'board_id', 'section_id', 'assigned_user_id', 'created_by_user_id',
         'name', 'description', 'due_date', 'priority', 'position', 'archived_at', 'done_at',
-        'parent_card_id', 'is_done',
+        'parent_card_id', 'is_done', 'ticket_number',
     ];
 
     protected $casts = [

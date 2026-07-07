@@ -49,6 +49,8 @@ class BoardModelRepository implements BoardRepository {
             'owner:id,name,email',
         ])->findOrFail($id);
         $this->authorizeAccess($board);
+        // Attach the human-facing ticket key (YON-42 / #42) to each card.
+        $board->cards->each(fn($c) => $c->ticket_key = CardModelRepository::composeTicketKey($board->ticket_prefix, $c->ticket_number));
         $board->sharedWith->each(fn($u) => $u->permission = $u->pivot->permission ?? 'write');
         // Expose the current user's capabilities so the client can gate editing/managing
         // without re-deriving the (project-aware) permission rules.
@@ -79,11 +81,14 @@ class BoardModelRepository implements BoardRepository {
         $this->authorizeOwner($board);
 
         $board->update([
-            'name'        => $request['name']        ?? $board->name,
-            'description' => $request['description'] ?? $board->description,
-            'project_id'  => array_key_exists('project_id', $request)
+            'name'          => $request['name']        ?? $board->name,
+            'description'   => $request['description'] ?? $board->description,
+            'project_id'    => array_key_exists('project_id', $request)
                                 ? $request['project_id']
                                 : $board->project_id,
+            'ticket_prefix' => array_key_exists('ticket_prefix', $request)
+                                ? $request['ticket_prefix']
+                                : $board->ticket_prefix,
         ]);
 
         return $board->fresh()->load(['owner:id,name', 'sharedWith:id,name'])->loadCount('cards');
