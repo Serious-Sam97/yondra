@@ -50,10 +50,15 @@ class BoardController extends Controller
     public function update(Request $request, int $boardId)
     {
         $validated = $request->validate([
-            'name'          => ['sometimes', 'string', 'max:255'],
-            'description'   => ['nullable', 'string'],
-            'project_id'    => ['nullable', 'integer', 'exists:projects,id'],
-            'ticket_prefix' => ['sometimes', 'nullable', 'string', 'max:10'],
+            'name'               => ['sometimes', 'string', 'max:255'],
+            'description'        => ['nullable', 'string'],
+            'project_id'         => ['nullable', 'integer', 'exists:projects,id'],
+            'ticket_prefix'      => ['sometimes', 'nullable', 'string', 'max:10'],
+            'next_ticket_number' => ['sometimes', 'integer', 'min:1'],
+            'background'         => ['sometimes', 'nullable', 'string', 'max:40'],
+            'default_permission' => ['sometimes', 'in:read,write,owner'],
+            'github_repo'        => ['sometimes', 'nullable', 'string', 'regex:/^[\w.-]+\/[\w.-]+$/'],
+            'github_token'       => ['sometimes', 'nullable', 'string', 'max:255'],
         ]);
 
         $this->authorizeProject($validated['project_id'] ?? null);
@@ -67,6 +72,33 @@ class BoardController extends Controller
         $validated['id'] = $boardId;
 
         return $this->boardService->edit($validated);
+    }
+
+    public function archive(int $boardId)
+    {
+        $this->authorizeManage($boardId);
+        return $this->boardService->setArchived($boardId, true);
+    }
+
+    public function unarchive(int $boardId)
+    {
+        $this->authorizeManage($boardId);
+        return $this->boardService->setArchived($boardId, false);
+    }
+
+    public function copy(Request $request, int $boardId)
+    {
+        // Any member who can see the board may clone it into their own space.
+        $this->authorizeBoard($boardId);
+        $validated = $request->validate([
+            'name'          => ['sometimes', 'string', 'max:255'],
+            'include_cards' => ['sometimes', 'boolean'],
+        ]);
+
+        return response()->json(
+            $this->boardService->duplicate($boardId, $validated['name'] ?? null, (bool) ($validated['include_cards'] ?? false)),
+            201
+        );
     }
 
     private function authorizeProject(?int $projectId): void

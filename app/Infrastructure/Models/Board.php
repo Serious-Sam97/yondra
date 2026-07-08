@@ -9,7 +9,20 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Board extends Model
 {
-    protected $fillable = ['user_id', 'project_id', 'name', 'description', 'ticket_prefix'];
+    protected $fillable = [
+        'user_id', 'project_id', 'name', 'description', 'ticket_prefix',
+        'next_ticket_number', 'background', 'default_permission', 'archived_at',
+        'github_repo', 'github_token', 'github_webhook_secret',
+    ];
+
+    protected $casts = [
+        'archived_at'  => 'datetime',
+        'github_token' => 'encrypted',
+    ];
+
+    // Never expose the raw token to the client; capabilities are surfaced via
+    // github_connected in the repository payload instead.
+    protected $hidden = ['github_token'];
 
     public function owner(): BelongsTo {
         return $this->belongsTo(User::class, 'user_id');

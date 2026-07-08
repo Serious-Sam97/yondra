@@ -74,7 +74,7 @@ class BoardShareController extends Controller
             return response()->json(['message' => 'You already own this board.'], 422);
         }
 
-        $permission = $request->input('permission', 'write');
+        $permission = $request->input('permission', $board->default_permission ?? 'write');
 
         BoardShare::updateOrCreate(
             ['board_id' => $boardId, 'user_id' => $user->id],

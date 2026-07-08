@@ -9,6 +9,8 @@ use App\Http\Controllers\CardChecklistController;
 use App\Http\Controllers\CardCommentController;
 use App\Http\Controllers\CardController;
 use App\Http\Controllers\CardImageController;
+use App\Http\Controllers\CardLinkController;
+use App\Http\Controllers\GitHubWebhookController;
 use App\Http\Controllers\ImageUploadController;
 use App\Http\Controllers\CardTemplateController;
 use App\Http\Controllers\NotificationController;
@@ -31,6 +33,9 @@ Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanc
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 
+// Inbound GitHub webhooks — public, authenticated per-board via HMAC signature.
+Route::post('/webhooks/github/{boardId}', [GitHubWebhookController::class, 'handle']);
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
@@ -43,6 +48,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/boards/{boardId}', [BoardController::class, 'show']);
     Route::put('/boards/{boardId}', [BoardController::class, 'update']);
     Route::delete('/boards/{boardId}', [BoardController::class, 'destroy']);
+    Route::post('/boards/{boardId}/archive', [BoardController::class, 'archive']);
+    Route::post('/boards/{boardId}/unarchive', [BoardController::class, 'unarchive']);
+    Route::post('/boards/{boardId}/copy', [BoardController::class, 'copy']);
     Route::post('/boards/{boardId}/sections', [SectionController::class, 'store']);
     Route::post('/boards/{boardId}/sections/reorder', [SectionController::class, 'reorder']);
     Route::put('/boards/{boardId}/sections/{sectionId}', [SectionController::class, 'update']);
@@ -65,6 +73,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/boards/{boardId}/cards/{cardId}/attachments', [CardImageController::class, 'store']);
     Route::delete('/boards/{boardId}/cards/{cardId}/attachments/{imageId}', [CardImageController::class, 'destroy']);
 
+    Route::post('/boards/{boardId}/cards/{cardId}/links', [CardLinkController::class, 'store']);
+    Route::post('/boards/{boardId}/cards/{cardId}/links/{linkId}/refresh', [CardLinkController::class, 'refresh']);
+    Route::delete('/boards/{boardId}/cards/{cardId}/links/{linkId}', [CardLinkController::class, 'destroy']);
+
     // Board-scoped inline-image upload for rich-text (works before a card exists).
     Route::post('/boards/{boardId}/uploads', [ImageUploadController::class, 'store']);
 
@@ -75,6 +87,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/boards/{boardId}/messages/{messageId}', [BoardMessageController::class, 'destroy']);
 
     Route::post('/boards/{boardId}/tags', [TagController::class, 'store']);
+    Route::put('/boards/{boardId}/tags/{tagId}', [TagController::class, 'update']);
     Route::delete('/boards/{boardId}/tags/{tagId}', [TagController::class, 'destroy']);
 
     Route::get('/boards/{boardId}/share/candidates', [BoardShareController::class, 'candidates']);
@@ -87,7 +100,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/projects/{projectId}', [ProjectController::class, 'show']);
     Route::put('/projects/{projectId}', [ProjectController::class, 'update']);
     Route::delete('/projects/{projectId}', [ProjectController::class, 'destroy']);
+    Route::post('/projects/{projectId}/archive', [ProjectController::class, 'archive']);
+    Route::post('/projects/{projectId}/unarchive', [ProjectController::class, 'unarchive']);
+    Route::post('/projects/{projectId}/copy', [ProjectController::class, 'copy']);
 
+    Route::get('/projects/{projectId}/members/candidates', [ProjectMemberController::class, 'candidates']);
     Route::post('/projects/{projectId}/members', [ProjectMemberController::class, 'store']);
     Route::put('/projects/{projectId}/members/{userId}', [ProjectMemberController::class, 'update']);
     Route::delete('/projects/{projectId}/members/{userId}', [ProjectMemberController::class, 'destroy']);

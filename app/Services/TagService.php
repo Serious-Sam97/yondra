@@ -25,6 +25,11 @@ class TagService
         return $this->tagRepository->save($data);
     }
 
+    public function edit(int $boardId, int $id, array $data): mixed
+    {
+        return $this->tagRepository->update($boardId, $id, $data);
+    }
+
     public function remove(int $boardId, int $id): void
     {
         $this->tagRepository->delete($boardId, $id);

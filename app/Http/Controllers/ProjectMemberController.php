@@ -15,6 +15,15 @@ class ProjectMemberController extends Controller
         $this->service = resolve(ProjectService::class);
     }
 
+    public function candidates(Request $request, int $projectId)
+    {
+        $validated = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        return $this->service->memberCandidates($projectId, $validated['q'] ?? null);
+    }
+
     public function store(Request $request, int $projectId)
     {
         $validated = $request->validate([

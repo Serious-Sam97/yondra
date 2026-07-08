@@ -38,9 +38,10 @@ class ProjectController extends Controller
     public function update(Request $request, int $projectId)
     {
         $validated = $request->validate([
-            'name'        => ['sometimes', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'color'       => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'name'               => ['sometimes', 'string', 'max:255'],
+            'description'        => ['nullable', 'string'],
+            'color'              => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'default_permission' => ['sometimes', 'in:read,write,owner'],
         ]);
 
         $validated['id'] = $projectId;
@@ -52,5 +53,31 @@ class ProjectController extends Controller
     {
         $this->service->remove($projectId);
         return response()->json(null, 204);
+    }
+
+    public function archive(int $projectId)
+    {
+        return $this->service->setArchived($projectId, true);
+    }
+
+    public function unarchive(int $projectId)
+    {
+        return $this->service->setArchived($projectId, false);
+    }
+
+    public function copy(Request $request, int $projectId)
+    {
+        $validated = $request->validate([
+            'name'           => ['sometimes', 'string', 'max:255'],
+            'include_boards' => ['sometimes', 'boolean'],
+            'include_cards'  => ['sometimes', 'boolean'],
+        ]);
+
+        return response()->json($this->service->duplicate(
+            $projectId,
+            $validated['name'] ?? null,
+            (bool) ($validated['include_boards'] ?? true),
+            (bool) ($validated['include_cards'] ?? false),
+        ), 201);
     }
 }

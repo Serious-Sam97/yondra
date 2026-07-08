@@ -10,4 +10,6 @@ interface BoardRepository {
     public function save($request);
     public function update($request);
     public function delete($request);
+    public function setArchived(int $id, bool $archived);
+    public function duplicate(int $id, ?string $name, bool $includeCards);
 }

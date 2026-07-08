@@ -39,5 +39,15 @@ class BoardService
     {
         return $this->boardRepository->delete(['id' => $id]);
     }
+
+    public function setArchived(int $id, bool $archived)
+    {
+        return $this->boardRepository->setArchived($id, $archived);
+    }
+
+    public function duplicate(int $id, ?string $name, bool $includeCards)
+    {
+        return $this->boardRepository->duplicate($id, $name, $includeCards);
+    }
 }
 

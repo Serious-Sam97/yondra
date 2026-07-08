@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'github' => [
+        'api_url' => env('GITHUB_API_URL', 'https://api.github.com'),
+        // Optional instance-wide fallback used when a board has no token of its own.
+        'token'   => env('GITHUB_TOKEN'),
+    ],
+
 ];

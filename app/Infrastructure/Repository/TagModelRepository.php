@@ -23,6 +23,13 @@ class TagModelRepository implements TagRepository
         ]);
     }
 
+    public function update(int $boardId, int $id, array $data): mixed
+    {
+        $tag = Tag::where('board_id', $boardId)->findOrFail($id);
+        $tag->update(array_intersect_key($data, array_flip(['name', 'color'])));
+        return $tag->fresh();
+    }
+
     public function delete(int $boardId, int $id): void
     {
         Tag::where('board_id', $boardId)->findOrFail($id)->delete();

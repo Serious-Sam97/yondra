@@ -14,4 +14,7 @@ interface ProjectRepository
     public function addMember(int $projectId, int $userId, string $role);
     public function updateMember(int $projectId, int $userId, string $role);
     public function removeMember(int $projectId, int $userId);
+    public function setArchived(int $id, bool $archived);
+    public function duplicate(int $id, ?string $name, bool $includeBoards, bool $includeCards);
+    public function memberCandidates(int $projectId, ?string $q);
 }

@@ -31,6 +31,17 @@ class TagController extends Controller
         return response()->json($tag, 201);
     }
 
+    public function update(Request $request, int $boardId, int $tagId)
+    {
+        $this->authorizeWrite($boardId);
+        $validated = $request->validate([
+            'name'  => ['sometimes', 'string', 'max:50'],
+            'color' => ['sometimes', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+        ]);
+
+        return response()->json($this->tagService->edit($boardId, $tagId, $validated));
+    }
+
     public function destroy(int $boardId, int $tagId)
     {
         $this->authorizeWrite($boardId);
