@@ -14,6 +14,7 @@ use App\Http\Controllers\GitHubWebhookController;
 use App\Http\Controllers\ImageUploadController;
 use App\Http\Controllers\CardTemplateController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectMemberController;
 use App\Http\Controllers\SectionController;
@@ -84,6 +85,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/boards/{boardId}/cards/{cardId}/links', [CardLinkController::class, 'store']);
     Route::post('/boards/{boardId}/cards/{cardId}/links/{linkId}/refresh', [CardLinkController::class, 'refresh']);
     Route::delete('/boards/{boardId}/cards/{cardId}/links/{linkId}', [CardLinkController::class, 'destroy']);
+
+    // Planning Poker — collaborative Scrum estimation on a card.
+    Route::get('/boards/{boardId}/cards/{cardId}/planning', [PlanningController::class, 'show']);
+    Route::post('/boards/{boardId}/cards/{cardId}/planning/join', [PlanningController::class, 'join']);
+    Route::post('/boards/{boardId}/cards/{cardId}/planning/leave', [PlanningController::class, 'leave']);
+    Route::post('/boards/{boardId}/cards/{cardId}/planning/vote', [PlanningController::class, 'vote']);
+    Route::post('/boards/{boardId}/cards/{cardId}/planning/reveal', [PlanningController::class, 'reveal']);
+    Route::post('/boards/{boardId}/cards/{cardId}/planning/reset', [PlanningController::class, 'reset']);
+    Route::post('/boards/{boardId}/cards/{cardId}/planning/apply', [PlanningController::class, 'apply']);
 
     // Board-scoped inline-image upload for rich-text (works before a card exists).
     Route::post('/boards/{boardId}/uploads', [ImageUploadController::class, 'store']);
