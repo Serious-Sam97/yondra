@@ -116,7 +116,8 @@ class CardController extends Controller
             'section_id'    => ['required', 'integer', Rule::exists('sections', 'id')->where('board_id', $boardId)],
         ]);
 
-        DB::transaction(function () use ($validated, $boardId) {
+        $updatedCards = [];
+        DB::transaction(function () use ($validated, $boardId, &$updatedCards) {
             $targetSection = $validated['section_id'];
             // A card is "done" once it enters the board's configured done/won column
             // (falls back to a "Done"-named column) — same rule the card-edit path uses,
@@ -140,8 +141,15 @@ class CardController extends Controller
                     'section_entered_at' => $movedColumn ? now() : $card->section_entered_at,
                     'done_at'            => $doneAt,
                 ]);
+                $updatedCards[] = $card->fresh();
             }
         });
+
+        // Fan out each moved/repositioned card so other clients converge live. Reuses the
+        // 'card.updated' path (merges section_id/position/done_at) — no new event type.
+        foreach ($updatedCards as $card) {
+            broadcast(new BoardEvent($boardId, 'card.updated', $card->toArray()));
+        }
 
         return response()->json(['ok' => true]);
     }
