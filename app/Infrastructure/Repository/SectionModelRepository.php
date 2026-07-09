@@ -28,13 +28,22 @@ class SectionModelRepository implements SectionRepository
     public function update($request)
     {
         $section = Section::where('board_id', $request['board_id'])->findOrFail($request['id']);
-        $section->update(['name' => $request['name']]);
+        $section->update([
+            'name'        => $request['name'] ?? $section->name,
+            'aging_hours' => array_key_exists('aging_hours', $request)
+                ? $request['aging_hours']
+                : $section->aging_hours,
+        ]);
         return $section;
     }
 
     public function delete($request)
     {
         $section = Section::where('board_id', $request['board_id'])->findOrFail($request['id']);
+        // Clear the board's done column if it pointed at this section (no DB FK to do it).
+        \App\Infrastructure\Models\Board::where('id', $section->board_id)
+            ->where('done_section_id', $section->id)
+            ->update(['done_section_id' => null]);
         \App\Infrastructure\Models\Card::where('section_id', $section->id)->delete();
         $section->delete();
     }

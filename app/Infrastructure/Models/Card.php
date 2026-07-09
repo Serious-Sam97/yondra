@@ -13,16 +13,21 @@ class Card extends Model
         'board_id', 'section_id', 'assigned_user_id', 'created_by_user_id',
         'name', 'description', 'due_date', 'priority', 'position', 'archived_at', 'done_at',
         'parent_card_id', 'is_done', 'ticket_number',
+        'value', 'story_points', 'sprint_id', 'section_entered_at',
     ];
 
     protected $casts = [
-        'due_date'    => 'date:Y-m-d',
-        'archived_at' => 'datetime',
-        'done_at'     => 'datetime',
-        'is_done'     => 'boolean',
+        'due_date'           => 'date:Y-m-d',
+        'archived_at'        => 'datetime',
+        'done_at'            => 'datetime',
+        'section_entered_at' => 'datetime',
+        'is_done'            => 'boolean',
+        'value'              => 'decimal:2',
+        'story_points'       => 'integer',
     ];
 
     public function assignedUser(): BelongsTo   { return $this->belongsTo(User::class, 'assigned_user_id'); }
+    public function sprint(): BelongsTo         { return $this->belongsTo(Sprint::class); }
     public function createdBy(): BelongsTo      { return $this->belongsTo(User::class, 'created_by_user_id'); }
     public function tags(): BelongsToMany       { return $this->belongsToMany(Tag::class, 'card_tag'); }
     public function checklistItems(): HasMany   { return $this->hasMany(CardChecklistItem::class)->orderBy('position'); }

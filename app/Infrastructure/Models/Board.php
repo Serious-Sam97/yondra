@@ -10,19 +10,32 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Board extends Model
 {
     protected $fillable = [
-        'user_id', 'project_id', 'name', 'description', 'ticket_prefix',
+        'user_id', 'project_id', 'name', 'type', 'currency', 'done_section_id', 'description', 'ticket_prefix',
         'next_ticket_number', 'background', 'default_permission', 'archived_at',
         'github_repo', 'github_token', 'github_webhook_secret',
     ];
 
     protected $casts = [
-        'archived_at'  => 'datetime',
-        'github_token' => 'encrypted',
+        'archived_at'     => 'datetime',
+        'github_token'    => 'encrypted',
+        'done_section_id' => 'integer',
     ];
 
     // Never expose the raw token to the client; capabilities are surfaced via
     // github_connected in the repository payload instead.
     protected $hidden = ['github_token'];
+
+    /**
+     * Does landing a card in this section mark it done/closed? Uses the board's
+     * configured done column when set (the CRM "won" stage, or any chosen column);
+     * otherwise falls back to the legacy rule of a section literally named "Done".
+     */
+    public function marksDone(Section $section): bool
+    {
+        return $this->done_section_id
+            ? $section->id === $this->done_section_id
+            : strtolower((string) $section->name) === 'done';
+    }
 
     public function owner(): BelongsTo {
         return $this->belongsTo(User::class, 'user_id');
@@ -34,6 +47,10 @@ class Board extends Model
 
     public function sections(): HasMany {
         return $this->hasMany(Section::class)->orderBy('order');
+    }
+
+    public function sprints(): HasMany {
+        return $this->hasMany(Sprint::class);
     }
 
     public function cards(): HasMany {

@@ -38,6 +38,11 @@ class CardModelRepository implements CardRepository
                 'priority'           => $request['priority'] ?? null,
                 'position'           => $position,
                 'ticket_number'      => $ticketNumber,
+                'value'              => $request['value'] ?? null,
+                'story_points'       => $request['story_points'] ?? null,
+                'sprint_id'          => $request['sprint_id'] ?? null,
+                // Stamp stage entry so per-stage SLA aging measures from creation.
+                'section_entered_at' => now(),
             ]);
 
             if (!empty($request['tag_ids'])) {
@@ -64,27 +69,36 @@ class CardModelRepository implements CardRepository
 
         $newSectionId = $request['section_id'] ?? $card->section_id;
         $doneAt = $card->done_at;
+        $sectionEnteredAt = $card->section_entered_at;
+        $sectionChanged = isset($request['section_id']) && $request['section_id'] !== $card->section_id;
 
-        if (isset($request['section_id']) && $request['section_id'] !== $card->section_id) {
+        if ($sectionChanged) {
             $section = Section::find($newSectionId);
-            if ($section && strtolower($section->name) === 'done') {
+            $board = Board::find($card->board_id);
+            if ($section && $board && $board->marksDone($section)) {
                 $doneAt = $doneAt ?? now();
             } else {
                 $doneAt = null;
             }
+            // Reset the SLA-aging clock: moving stage means the card is fresh again.
+            $sectionEnteredAt = now();
         }
 
         $card->update([
-            'section_id'       => $newSectionId,
-            'assigned_user_id' => array_key_exists('assigned_user_id', $request)
+            'section_id'         => $newSectionId,
+            'assigned_user_id'   => array_key_exists('assigned_user_id', $request)
                 ? $request['assigned_user_id']
                 : $card->assigned_user_id,
-            'name'             => $request['name'] ?? $card->name,
-            'description'      => $request['description'] ?? $card->description,
-            'due_date'         => array_key_exists('due_date', $request) ? $request['due_date'] : $card->due_date,
-            'priority'         => array_key_exists('priority', $request) ? $request['priority'] : $card->priority,
-            'position'         => $request['position'] ?? $card->position,
-            'done_at'          => $doneAt,
+            'name'               => $request['name'] ?? $card->name,
+            'description'        => $request['description'] ?? $card->description,
+            'due_date'           => array_key_exists('due_date', $request) ? $request['due_date'] : $card->due_date,
+            'priority'           => array_key_exists('priority', $request) ? $request['priority'] : $card->priority,
+            'position'           => $request['position'] ?? $card->position,
+            'value'              => array_key_exists('value', $request) ? $request['value'] : $card->value,
+            'story_points'       => array_key_exists('story_points', $request) ? $request['story_points'] : $card->story_points,
+            'sprint_id'          => array_key_exists('sprint_id', $request) ? $request['sprint_id'] : $card->sprint_id,
+            'done_at'            => $doneAt,
+            'section_entered_at' => $sectionEnteredAt,
         ]);
 
         if (array_key_exists('tag_ids', $request)) {

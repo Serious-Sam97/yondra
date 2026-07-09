@@ -27,10 +27,11 @@ class SectionController extends Controller
     {
         $this->authorizeWrite($boardId);
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name'        => ['sometimes', 'string', 'max:255'],
+            'aging_hours' => ['sometimes', 'nullable', 'integer', 'min:1'],
         ]);
 
-        $section = $this->sectionService->rename($boardId, $sectionId, $validated['name']);
+        $section = $this->sectionService->edit($boardId, $sectionId, $validated);
         broadcast(new BoardEvent($boardId, 'section.updated', $section->toArray()));
         return response()->json($section);
     }

@@ -70,10 +70,6 @@ class BoardShareController extends Controller
             ? User::findOrFail($request->integer('user_id'))
             : User::where('email', $request->email)->firstOrFail();
 
-        if ($user->id === Auth::id()) {
-            return response()->json(['message' => 'You already own this board.'], 422);
-        }
-
         $permission = $request->input('permission', $board->default_permission ?? 'write');
 
         BoardShare::updateOrCreate(

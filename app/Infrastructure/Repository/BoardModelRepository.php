@@ -41,6 +41,7 @@ class BoardModelRepository implements BoardRepository {
     public function show($id) {
         $board = Board::with([
             'sections',
+            'sprints',
             'cards' => fn($q) => $q->whereNull('archived_at')->whereNull('parent_card_id')->orderBy('position'),
             'cards.assignedUser:id,name',
             'cards.createdBy:id,name',
@@ -78,15 +79,23 @@ class BoardModelRepository implements BoardRepository {
         $defaultPermission = $projectId
             ? (\App\Infrastructure\Models\Project::whereKey($projectId)->value('default_permission') ?? 'write')
             : 'write';
+        $type = $request['type'] ?? 'kanban';
         $board = Board::create([
             'user_id'            => $user->id,
             'project_id'         => $projectId,
             'name'               => $request['name'],
+            'type'               => $type,
+            'currency'           => $request['currency'] ?? 'BRL',
             'description'        => $request['description'] ?? '',
             'default_permission' => $defaultPermission,
         ]);
 
-        foreach (['To Do', 'In Progress', 'Done'] as $i => $sectionName) {
+        // Seed columns that fit the board type. CRM boards start as a sales
+        // funnel; kanban/scrum start with the classic workflow lanes.
+        $defaultSections = $type === 'crm'
+            ? ['Lead In', 'Contact Made', 'Proposal Made', 'Negotiations Started', 'Won']
+            : ['To Do', 'In Progress', 'Done'];
+        foreach ($defaultSections as $i => $sectionName) {
             Section::create(['board_id' => $board->id, 'name' => $sectionName, 'order' => $i]);
         }
 
@@ -99,6 +108,11 @@ class BoardModelRepository implements BoardRepository {
 
         $board->update([
             'name'               => $request['name']        ?? $board->name,
+            'type'               => $request['type']        ?? $board->type,
+            'currency'           => $request['currency']    ?? $board->currency,
+            'done_section_id'    => array_key_exists('done_section_id', $request)
+                                ? $request['done_section_id']
+                                : $board->done_section_id,
             'description'        => $request['description'] ?? $board->description,
             'project_id'         => array_key_exists('project_id', $request)
                                 ? $request['project_id']
@@ -148,6 +162,8 @@ class BoardModelRepository implements BoardRepository {
             'user_id'            => Auth::id(),
             'project_id'         => $source->project_id,
             'name'               => $name ?: ($source->name . ' (copy)'),
+            'type'               => $source->type,
+            'currency'           => $source->currency,
             'description'        => $source->description,
             'ticket_prefix'      => $source->ticket_prefix,
             'background'         => $source->background,
@@ -158,7 +174,7 @@ class BoardModelRepository implements BoardRepository {
         // (if included) can be rehomed onto the cloned structure.
         $sectionMap = [];
         foreach ($source->sections as $section) {
-            $new = Section::create(['board_id' => $copy->id, 'name' => $section->name, 'order' => $section->order]);
+            $new = Section::create(['board_id' => $copy->id, 'name' => $section->name, 'order' => $section->order, 'aging_hours' => $section->aging_hours]);
             $sectionMap[$section->id] = $new->id;
         }
 

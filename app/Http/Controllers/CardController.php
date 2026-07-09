@@ -32,6 +32,9 @@ class CardController extends Controller
             'description'      => ['nullable', 'string'],
             'due_date'         => ['nullable', 'date'],
             'priority'         => ['nullable', 'in:low,medium,high'],
+            'value'            => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'story_points'     => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'sprint_id'        => ['sometimes', 'nullable', 'integer', Rule::exists('sprints', 'id')->where('board_id', $boardId)],
         ]);
 
         $card = $this->cardService->create(array_merge($validated, ['board_id' => $boardId]));
@@ -61,6 +64,9 @@ class CardController extends Controller
             'due_date'         => ['nullable', 'date'],
             'priority'         => ['nullable', 'in:low,medium,high'],
             'position'         => ['sometimes', 'integer'],
+            'value'            => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'story_points'     => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'sprint_id'        => ['sometimes', 'nullable', 'integer', Rule::exists('sprints', 'id')->where('board_id', $boardId)],
         ]);
 
         $card = $this->cardService->edit(array_merge($validated, [
@@ -111,9 +117,29 @@ class CardController extends Controller
         ]);
 
         DB::transaction(function () use ($validated, $boardId) {
+            $targetSection = $validated['section_id'];
+            // A card is "done" once it enters the board's configured done/won column
+            // (falls back to a "Done"-named column) — same rule the card-edit path uses,
+            // so dragging there sets done_at (drives CRM won/sprint reports/metrics).
+            $board = \App\Infrastructure\Models\Board::find($boardId);
+            $targetSectionModel = \App\Infrastructure\Models\Section::find($targetSection);
+            $targetIsDone = $board && $targetSectionModel && $board->marksDone($targetSectionModel);
             foreach ($validated['ordered_ids'] as $position => $cardId) {
-                Card::where('board_id', $boardId)->where('id', $cardId)
-                    ->update(['position' => $position, 'section_id' => $validated['section_id']]);
+                $card = Card::where('board_id', $boardId)->where('id', $cardId)->first();
+                if (!$card) continue;
+                // Reset the SLA-aging clock only for cards that actually crossed into
+                // this column; a pure reorder within the same column keeps its age.
+                $movedColumn = $card->section_id !== $targetSection;
+                $doneAt = $card->done_at;
+                if ($movedColumn) {
+                    $doneAt = $targetIsDone ? ($doneAt ?? now()) : null;
+                }
+                $card->update([
+                    'position'           => $position,
+                    'section_id'         => $targetSection,
+                    'section_entered_at' => $movedColumn ? now() : $card->section_entered_at,
+                    'done_at'            => $doneAt,
+                ]);
             }
         });
 

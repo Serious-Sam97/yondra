@@ -20,9 +20,9 @@ class SectionService
         return $this->sectionRepository->save($data);
     }
 
-    public function rename(int $boardId, int $id, string $name): mixed
+    public function edit(int $boardId, int $id, array $data): mixed
     {
-        return $this->sectionRepository->update(['board_id' => $boardId, 'id' => $id, 'name' => $name]);
+        return $this->sectionRepository->update(array_merge($data, ['board_id' => $boardId, 'id' => $id]));
     }
 
     public function remove(int $boardId, int $id): void

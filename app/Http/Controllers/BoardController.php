@@ -6,6 +6,7 @@ use App\Infrastructure\Models\Project;
 use App\Services\BoardService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class BoardController extends Controller
@@ -40,6 +41,8 @@ class BoardController extends Controller
             'name'        => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'project_id'  => ['nullable', 'integer', 'exists:projects,id'],
+            'type'        => ['sometimes', 'in:kanban,scrum,crm'],
+            'currency'    => ['sometimes', 'string', 'size:3'],
         ]);
 
         $this->authorizeProject($validated['project_id'] ?? null);
@@ -53,6 +56,9 @@ class BoardController extends Controller
             'name'               => ['sometimes', 'string', 'max:255'],
             'description'        => ['nullable', 'string'],
             'project_id'         => ['nullable', 'integer', 'exists:projects,id'],
+            'type'               => ['sometimes', 'in:kanban,scrum,crm'],
+            'currency'           => ['sometimes', 'string', 'size:3'],
+            'done_section_id'    => ['sometimes', 'nullable', 'integer', Rule::exists('sections', 'id')->where('board_id', $boardId)],
             'ticket_prefix'      => ['sometimes', 'nullable', 'string', 'max:10'],
             'next_ticket_number' => ['sometimes', 'integer', 'min:1'],
             'background'         => ['sometimes', 'nullable', 'string', 'max:40'],
