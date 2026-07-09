@@ -1,6 +1,7 @@
 <?php
 
 use App\Infrastructure\Models\Board;
+use App\Infrastructure\Models\Project;
 use Illuminate\Support\Facades\Broadcast;
 
 Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
@@ -9,5 +10,12 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 
 Broadcast::channel('board.{boardId}', function ($user, $boardId) {
     $board = Board::find($boardId);
+
     return $board && $board->isAccessibleBy($user->id);
+});
+
+Broadcast::channel('project.{projectId}', function ($user, $projectId) {
+    $project = Project::find($projectId);
+
+    return $project && $project->isAccessibleBy($user->id);
 });

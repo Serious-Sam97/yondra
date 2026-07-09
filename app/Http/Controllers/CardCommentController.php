@@ -1,9 +1,12 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use App\Infrastructure\Models\CardComment;
-use App\Infrastructure\Models\YondraNotification;
+use App\Infrastructure\Models\User;
+use App\Notifications\CardCommentedNotification;
 use App\Services\MentionService;
+use App\Services\Notifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -13,6 +16,7 @@ class CardCommentController extends Controller
     {
         $this->authorizeBoard($boardId);
         $card = $this->boardCard($boardId, $cardId);
+
         return CardComment::where('card_id', $card->id)->with('user:id,name')->latest()->get();
     }
 
@@ -24,34 +28,33 @@ class CardCommentController extends Controller
         $comment = CardComment::create(['card_id' => $card->id, 'user_id' => Auth::id(), 'body' => $validated['body']]);
         $comment->load('user:id,name');
 
-        $message = Auth::user()->name . ' commented on "' . $card->name . '"';
-        $notified = collect();
+        $actor = Auth::user();
 
-        if ($card->assigned_user_id && $card->assigned_user_id !== Auth::id()) {
-            YondraNotification::create([
-                'user_id'  => $card->assigned_user_id,
-                'board_id' => $boardId,
-                'card_id'  => $cardId,
-                'message'  => $message,
-            ]);
-            $notified->push($card->assigned_user_id);
-        }
+        // Notify the assignee and the card's creator (deduped, minus the author).
+        $notified = collect([$card->assigned_user_id, $card->created_by_user_id])
+            ->filter()
+            ->reject(fn ($id) => $id === $actor->id)
+            ->unique()
+            ->values();
 
-        if ($card->created_by_user_id && $card->created_by_user_id !== Auth::id() && !$notified->contains($card->created_by_user_id)) {
-            YondraNotification::create([
-                'user_id'  => $card->created_by_user_id,
-                'board_id' => $boardId,
-                'card_id'  => $cardId,
-                'message'  => $message,
-            ]);
-            $notified->push($card->created_by_user_id);
+        if ($notified->isNotEmpty()) {
+            resolve(Notifier::class)->send(
+                User::whereIn('id', $notified)->get(),
+                new CardCommentedNotification(
+                    actorId: (int) $actor->id,
+                    actorName: $actor->name,
+                    boardId: $boardId,
+                    cardId: $cardId,
+                    cardName: $card->name,
+                ),
+            );
         }
 
         resolve(MentionService::class)->notify(
             $boardId,
             $cardId,
             $validated['body'],
-            Auth::user()->name . ' mentioned you in "' . $card->name . '"',
+            $actor->name.' mentioned you in "'.$card->name.'"',
             $notified,
         );
 
@@ -64,6 +67,7 @@ class CardCommentController extends Controller
         $card = $this->boardCard($boardId, $cardId);
         $comment = CardComment::where('card_id', $card->id)->where('user_id', Auth::id())->findOrFail($commentId);
         $comment->delete();
+
         return response()->json(null, 204);
     }
 }

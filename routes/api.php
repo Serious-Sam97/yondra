@@ -10,16 +10,20 @@ use App\Http\Controllers\CardCommentController;
 use App\Http\Controllers\CardController;
 use App\Http\Controllers\CardImageController;
 use App\Http\Controllers\CardLinkController;
+use App\Http\Controllers\CardTemplateController;
 use App\Http\Controllers\GitHubWebhookController;
 use App\Http\Controllers\ImageUploadController;
-use App\Http\Controllers\CardTemplateController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\NotificationPreferenceController;
 use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectMemberController;
+use App\Http\Controllers\QaController;
 use App\Http\Controllers\SectionController;
 use App\Http\Controllers\SprintController;
+use App\Http\Controllers\StepController;
 use App\Http\Controllers\TagController;
+use App\Http\Controllers\TestPlanController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Route;
@@ -95,6 +99,27 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/boards/{boardId}/cards/{cardId}/planning/reset', [PlanningController::class, 'reset']);
     Route::post('/boards/{boardId}/cards/{cardId}/planning/apply', [PlanningController::class, 'apply']);
 
+    // Sentinel (QA) — N test cases per card, each with N runs (reports).
+    Route::get('/boards/{boardId}/cards/{cardId}/qa', [QaController::class, 'index']);
+    Route::post('/boards/{boardId}/cards/{cardId}/qa/cases', [QaController::class, 'storeCase']);
+    Route::put('/boards/{boardId}/cards/{cardId}/qa/cases/{caseId}', [QaController::class, 'updateCase']);
+    Route::delete('/boards/{boardId}/cards/{cardId}/qa/cases/{caseId}', [QaController::class, 'destroyCase']);
+    Route::post('/boards/{boardId}/cards/{cardId}/qa/cases/{caseId}/runs', [QaController::class, 'storeRun']);
+    Route::post('/boards/{boardId}/cards/{cardId}/qa/cases/{caseId}/bug', [QaController::class, 'linkBug']);
+
+    // Sentinel (QA) — global reusable-step library (per board). Editing propagates.
+    Route::get('/boards/{boardId}/qa/steps', [StepController::class, 'index']);
+    Route::post('/boards/{boardId}/qa/steps', [StepController::class, 'store']);
+    Route::put('/boards/{boardId}/qa/steps/{stepId}', [StepController::class, 'update']);
+    Route::delete('/boards/{boardId}/qa/steps/{stepId}', [StepController::class, 'destroy']);
+
+    // Sentinel (QA) — test plans / suites (per board, cross-card).
+    Route::get('/boards/{boardId}/qa/overview', [TestPlanController::class, 'overview']);
+    Route::get('/boards/{boardId}/qa/plans', [TestPlanController::class, 'index']);
+    Route::post('/boards/{boardId}/qa/plans', [TestPlanController::class, 'store']);
+    Route::put('/boards/{boardId}/qa/plans/{planId}', [TestPlanController::class, 'update']);
+    Route::delete('/boards/{boardId}/qa/plans/{planId}', [TestPlanController::class, 'destroy']);
+
     // Board-scoped inline-image upload for rich-text (works before a card exists).
     Route::post('/boards/{boardId}/uploads', [ImageUploadController::class, 'store']);
 
@@ -128,6 +153,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/projects/{projectId}/members/{userId}', [ProjectMemberController::class, 'destroy']);
 
     Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/preferences', [NotificationPreferenceController::class, 'show']);
+    Route::put('/notifications/preferences', [NotificationPreferenceController::class, 'update']);
     Route::put('/notifications/{id}/read', [NotificationController::class, 'markRead']);
     Route::put('/notifications/read-all', [NotificationController::class, 'markAllRead']);
 
@@ -139,3 +166,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/boards/{boardId}/cards/{cardId}/subtasks', [CardController::class, 'storeSubtask']);
     Route::put('/boards/{boardId}/cards/{cardId}/subtasks/{subtaskId}', [CardController::class, 'updateSubtask']);
 });
+
+// Vortex — private admin dashboard API (see routes/vortex.php).
+Route::prefix('vortex')
+    ->middleware(['auth:sanctum', 'vortex.admin'])
+    ->group(base_path('routes/vortex.php'));

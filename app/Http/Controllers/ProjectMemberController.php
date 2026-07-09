@@ -2,9 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Infrastructure\Models\Project;
 use App\Infrastructure\Models\User;
+use App\Notifications\ProjectMemberAddedNotification;
+use App\Services\Notifier;
 use App\Services\ProjectService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class ProjectMemberController extends Controller
 {
@@ -28,13 +32,24 @@ class ProjectMemberController extends Controller
     {
         $validated = $request->validate([
             'email' => ['required', 'email', 'exists:users,email'],
-            'role'  => ['nullable', 'in:owner,member,viewer'],
+            'role' => ['nullable', 'in:owner,member,viewer'],
         ]);
 
         $user = User::where('email', $validated['email'])->firstOrFail();
         $role = $validated['role'] ?? 'member';
 
-        return $this->service->addMember($projectId, $user->id, $role);
+        $result = $this->service->addMember($projectId, $user->id, $role);
+
+        if ($user->id !== Auth::id()) {
+            resolve(Notifier::class)->send($user, new ProjectMemberAddedNotification(
+                actorId: (int) Auth::id(),
+                actorName: Auth::user()->name,
+                projectId: $projectId,
+                projectName: (string) (Project::find($projectId)?->name ?? 'a project'),
+            ));
+        }
+
+        return $result;
     }
 
     public function update(Request $request, int $projectId, int $userId)
@@ -49,6 +64,7 @@ class ProjectMemberController extends Controller
     public function destroy(int $projectId, int $userId)
     {
         $this->service->removeMember($projectId, $userId);
+
         return response()->json(null, 204);
     }
 }

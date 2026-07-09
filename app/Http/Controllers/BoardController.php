@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\ProjectEvent;
 use App\Infrastructure\Models\Project;
 use App\Services\BoardService;
 use Illuminate\Http\Request;
@@ -32,39 +33,52 @@ class BoardController extends Controller
     {
         $this->authorizeManage($boardId);
         $this->boardService->remove($boardId);
+
         return response()->json(null, 204);
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name'        => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'project_id'  => ['nullable', 'integer', 'exists:projects,id'],
-            'type'        => ['sometimes', 'in:kanban,scrum,crm'],
-            'currency'    => ['sometimes', 'string', 'size:3'],
+            'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+            'type' => ['sometimes', 'in:kanban,scrum,crm'],
+            'currency' => ['sometimes', 'string', 'size:3'],
         ]);
 
         $this->authorizeProject($validated['project_id'] ?? null);
 
-        return response()->json($this->boardService->create($validated), 201);
+        $board = $this->boardService->create($validated);
+
+        // Live-add the board to the project's board list for everyone viewing it.
+        if ($board->project_id) {
+            broadcast(new ProjectEvent(
+                $board->project_id,
+                'board.created',
+                $board->fresh()->load('owner:id,name,email')->toArray(),
+            ));
+        }
+
+        return response()->json($board, 201);
     }
 
     public function update(Request $request, int $boardId)
     {
         $validated = $request->validate([
-            'name'               => ['sometimes', 'string', 'max:255'],
-            'description'        => ['nullable', 'string'],
-            'project_id'         => ['nullable', 'integer', 'exists:projects,id'],
-            'type'               => ['sometimes', 'in:kanban,scrum,crm'],
-            'currency'           => ['sometimes', 'string', 'size:3'],
-            'done_section_id'    => ['sometimes', 'nullable', 'integer', Rule::exists('sections', 'id')->where('board_id', $boardId)],
-            'ticket_prefix'      => ['sometimes', 'nullable', 'string', 'max:10'],
+            'name' => ['sometimes', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+            'type' => ['sometimes', 'in:kanban,scrum,crm'],
+            'currency' => ['sometimes', 'string', 'size:3'],
+            'done_section_id' => ['sometimes', 'nullable', 'integer', Rule::exists('sections', 'id')->where('board_id', $boardId)],
+            'qa_enabled' => ['sometimes', 'boolean'],
+            'ticket_prefix' => ['sometimes', 'nullable', 'string', 'max:10'],
             'next_ticket_number' => ['sometimes', 'integer', 'min:1'],
-            'background'         => ['sometimes', 'nullable', 'string', 'max:40'],
+            'background' => ['sometimes', 'nullable', 'string', 'max:40'],
             'default_permission' => ['sometimes', 'in:read,write,owner'],
-            'github_repo'        => ['sometimes', 'nullable', 'string', 'regex:/^[\w.-]+\/[\w.-]+$/'],
-            'github_token'       => ['sometimes', 'nullable', 'string', 'max:255'],
+            'github_repo' => ['sometimes', 'nullable', 'string', 'regex:/^[\w.-]+\/[\w.-]+$/'],
+            'github_token' => ['sometimes', 'nullable', 'string', 'max:255'],
         ]);
 
         $this->authorizeProject($validated['project_id'] ?? null);
@@ -83,12 +97,14 @@ class BoardController extends Controller
     public function archive(int $boardId)
     {
         $this->authorizeManage($boardId);
+
         return $this->boardService->setArchived($boardId, true);
     }
 
     public function unarchive(int $boardId)
     {
         $this->authorizeManage($boardId);
+
         return $this->boardService->setArchived($boardId, false);
     }
 
@@ -97,7 +113,7 @@ class BoardController extends Controller
         // Any member who can see the board may clone it into their own space.
         $this->authorizeBoard($boardId);
         $validated = $request->validate([
-            'name'          => ['sometimes', 'string', 'max:255'],
+            'name' => ['sometimes', 'string', 'max:255'],
             'include_cards' => ['sometimes', 'boolean'],
         ]);
 
@@ -114,8 +130,8 @@ class BoardController extends Controller
         }
 
         $project = Project::findOrFail($projectId);
-        if (!$project->isAccessibleBy(Auth::id())) {
-            throw new AccessDeniedHttpException();
+        if (! $project->isAccessibleBy(Auth::id())) {
+            throw new AccessDeniedHttpException;
         }
     }
 }

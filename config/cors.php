@@ -19,9 +19,10 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['http://localhost:3000', 'http://localhost:3001', 'https://yondra-thunder.vercel.app', 'https://yondra.net'],
+    'allowed_origins' => ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3010', 'https://yondra-thunder.vercel.app', 'https://yondra.net'],
 
-    'allowed_origins_patterns' => [],
+    // Any localhost port is allowed in dev (covers Vortex on :3010 and future tools).
+    'allowed_origins_patterns' => ['#^http://localhost:\d+$#'],
 
     'allowed_headers' => ['*'],
 

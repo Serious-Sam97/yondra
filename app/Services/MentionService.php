@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Infrastructure\Models\Board;
-use App\Infrastructure\Models\YondraNotification;
+use App\Notifications\MentionedNotification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 
@@ -26,7 +26,7 @@ class MentionService
         }
 
         $board = Board::with(['owner', 'sharedWith'])->find($boardId);
-        if (!$board) {
+        if (! $board) {
             return $notified;
         }
         $boardUsers = collect([$board->owner])->merge($board->sharedWith)->filter();
@@ -35,13 +35,13 @@ class MentionService
             $mentioned = $boardUsers->first(
                 fn ($u) => preg_replace('/\s+/u', '', $u->name) === $handle
             );
-            if ($mentioned && $mentioned->id !== Auth::id() && !$notified->contains($mentioned->id)) {
-                YondraNotification::create([
-                    'user_id'  => $mentioned->id,
-                    'board_id' => $boardId,
-                    'card_id'  => $cardId,
-                    'message'  => $message,
-                ]);
+            if ($mentioned && $mentioned->id !== Auth::id() && ! $notified->contains($mentioned->id)) {
+                resolve(Notifier::class)->send($mentioned, new MentionedNotification(
+                    actorId: (int) Auth::id(),
+                    message: $message,
+                    boardId: $boardId,
+                    cardId: $cardId,
+                ));
                 $notified->push($mentioned->id);
             }
         }
