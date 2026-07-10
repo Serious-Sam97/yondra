@@ -78,7 +78,7 @@ class CardLinkController extends Controller
     /** Reload the card with its client-facing relations, broadcast it, and return it. */
     private function broadcastCard(int $boardId, int $cardId): array
     {
-        $card = Card::with(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links'])->findOrFail($cardId);
+        $card = Card::with(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links', 'documents'])->findOrFail($cardId);
         $board = Board::find($boardId);
         $card->ticket_key = CardModelRepository::composeTicketKey($board?->ticket_prefix, $card->ticket_number);
         $payload = $card->toArray();

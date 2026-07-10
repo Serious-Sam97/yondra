@@ -127,7 +127,7 @@ class GitHubWebhookController extends Controller
 
     private function broadcastCard(Board $board, int $cardId): void
     {
-        $card = Card::with(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links'])->find($cardId);
+        $card = Card::with(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links', 'documents'])->find($cardId);
         if (!$card) {
             return;
         }

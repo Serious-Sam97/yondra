@@ -339,7 +339,7 @@ class WhatsappService
 
             $card->ticket_key = CardModelRepository::composeTicketKey($locked->ticket_prefix, $ticket);
 
-            return $card->load(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links'])->toArray();
+            return $card->load(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links', 'documents'])->toArray();
         });
     }
 

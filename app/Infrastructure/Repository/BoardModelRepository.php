@@ -53,6 +53,7 @@ class BoardModelRepository implements BoardRepository
             'cards.checklistItems',
             'cards.images',
             'cards.links',
+            'cards.documents',
             'tags',
             'sharedWith:id,name,email',
             'owner:id,name,email',

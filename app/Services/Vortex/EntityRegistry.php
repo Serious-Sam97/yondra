@@ -6,6 +6,7 @@ use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\BoardShare;
 use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\CardComment;
+use App\Infrastructure\Models\CardDocument;
 use App\Infrastructure\Models\CardImage;
 use App\Infrastructure\Models\Project;
 use App\Infrastructure\Models\Section;
@@ -57,7 +58,7 @@ class EntityRegistry
             'sortable' => ['id', 'name', 'priority', 'due_date', 'created_at'],
             'default_sort' => ['created_at', 'desc'],
             'with' => ['board:id,name', 'section:id,name', 'assignedUser:id,name'],
-            'counts' => ['comments', 'images', 'checklistItems'],
+            'counts' => ['comments', 'images', 'documents', 'checklistItems'],
         ],
         'sections' => [
             'model' => Section::class,
@@ -72,6 +73,16 @@ class EntityRegistry
         'files' => [
             'model' => CardImage::class,
             'label' => 'Files',
+            'searchable' => ['original_name', 'mime_type'],
+            'editable' => [],
+            'sortable' => ['id', 'original_name', 'size', 'created_at'],
+            'default_sort' => ['created_at', 'desc'],
+            'with' => ['card:id,name,board_id', 'uploader:id,name'],
+            'counts' => [],
+        ],
+        'documents' => [
+            'model' => CardDocument::class,
+            'label' => 'Documents',
             'searchable' => ['original_name', 'mime_type'],
             'editable' => [],
             'sortable' => ['id', 'original_name', 'size', 'created_at'],

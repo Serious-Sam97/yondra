@@ -61,6 +61,18 @@ class CardCommentController extends Controller
         return response()->json($comment, 201);
     }
 
+    public function update(Request $request, int $boardId, int $cardId, int $commentId)
+    {
+        $this->authorizeBoard($boardId);
+        $card = $this->boardCard($boardId, $cardId);
+        $validated = $request->validate(['body' => ['required', 'string']]);
+        $comment = CardComment::where('card_id', $card->id)->where('user_id', Auth::id())->findOrFail($commentId);
+        $comment->update(['body' => $validated['body']]);
+        $comment->load('user:id,name');
+
+        return response()->json($comment);
+    }
+
     public function destroy(int $boardId, int $cardId, int $commentId)
     {
         $this->authorizeBoard($boardId);

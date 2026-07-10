@@ -9,6 +9,7 @@ use App\Infrastructure\Models\BoardMessage;
 use App\Infrastructure\Models\BoardShare;
 use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\CardComment;
+use App\Infrastructure\Models\CardDocument;
 use App\Infrastructure\Models\CardImage;
 use App\Infrastructure\Models\Project;
 use App\Infrastructure\Models\Section;
@@ -35,6 +36,7 @@ class OverviewController extends Controller
                 'cards' => Card::count(),
                 'cards_archived' => Card::whereNotNull('archived_at')->count(),
                 'card_images' => CardImage::count(),
+                'card_documents' => CardDocument::count(),
                 'comments' => CardComment::count(),
                 'messages' => BoardMessage::count(),
                 'activities' => BoardActivity::count(),
@@ -47,6 +49,7 @@ class OverviewController extends Controller
             ],
             'storage' => [
                 'attachments_bytes' => (int) CardImage::sum('size'),
+                'documents_bytes' => (int) CardDocument::sum('size'),
                 'disk_public_bytes' => Cache::remember('vortex.disk_public_bytes', 60, function () {
                     $disk = Storage::disk('public');
 

@@ -84,6 +84,11 @@ class Card extends Model
         return $this->hasMany(CardLink::class)->latest();
     }
 
+    public function documents(): HasMany
+    {
+        return $this->hasMany(CardDocument::class)->orderBy('position');
+    }
+
     public function comments(): HasMany
     {
         return $this->hasMany(CardComment::class)->latest();

@@ -110,6 +110,31 @@ it('rejects reading and writing comments on a card of another board', function (
     expect(CardComment::where('card_id', $victimCard->id)->count())->toBe(1);
 });
 
+it('lets a user edit their own comment', function () {
+    extract(crossTenantSetup());
+    $comment = CardComment::create(['card_id' => $victimCard->id, 'user_id' => $victim->id, 'body' => 'original']);
+
+    $this->actingAs($victim)
+        ->putJson("/api/boards/{$victimBoard->id}/cards/{$victimCard->id}/comments/{$comment->id}", ['body' => 'edited'])
+        ->assertOk()
+        ->assertJsonPath('body', 'edited');
+
+    expect($comment->fresh()->body)->toBe('edited');
+});
+
+it('rejects editing a comment authored by someone else', function () {
+    extract(crossTenantSetup());
+    // Attacker is shared onto the victim's board but is not the comment author.
+    $victimBoard->sharedWith()->attach($attacker->id, ['permission' => 'write']);
+    $comment = CardComment::create(['card_id' => $victimCard->id, 'user_id' => $victim->id, 'body' => 'original']);
+
+    $this->actingAs($attacker)
+        ->putJson("/api/boards/{$victimBoard->id}/cards/{$victimCard->id}/comments/{$comment->id}", ['body' => 'hacked'])
+        ->assertNotFound();
+
+    expect($comment->fresh()->body)->toBe('original');
+});
+
 it('rejects creating a subtask under a card of another board', function () {
     extract(crossTenantSetup());
 

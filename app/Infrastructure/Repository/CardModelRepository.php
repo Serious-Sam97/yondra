@@ -50,7 +50,7 @@ class CardModelRepository implements CardRepository
             }
 
             $card->ticket_key = self::composeTicketKey($board->ticket_prefix, $ticketNumber);
-            return $card->load(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links'])->toArray();
+            return $card->load(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links', 'documents'])->toArray();
         });
     }
 
@@ -105,7 +105,7 @@ class CardModelRepository implements CardRepository
             $card->tags()->sync($request['tag_ids'] ?? []);
         }
 
-        $fresh = $card->fresh()->load(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links']);
+        $fresh = $card->fresh()->load(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links', 'documents']);
         $board = Board::find($fresh->board_id);
         $fresh->ticket_key = self::composeTicketKey($board?->ticket_prefix, $fresh->ticket_number);
         return $fresh->toArray();

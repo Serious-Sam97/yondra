@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Vortex;
 
 use App\Http\Controllers\Controller;
+use App\Infrastructure\Models\CardDocument;
 use App\Infrastructure\Models\CardImage;
 use App\Services\Vortex\EntityRegistry;
 use Illuminate\Http\Request;
@@ -100,6 +101,9 @@ class EntityController extends Controller
         // Files also live on disk — remove the blob alongside the row.
         if ($record instanceof CardImage) {
             Storage::disk('public')->delete($record->path);
+        }
+        if ($record instanceof CardDocument) {
+            Storage::disk($record->disk ?: 'local')->delete($record->path);
         }
 
         $record->delete();

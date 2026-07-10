@@ -8,6 +8,7 @@ use App\Http\Controllers\BoardShareController;
 use App\Http\Controllers\CardChecklistController;
 use App\Http\Controllers\CardCommentController;
 use App\Http\Controllers\CardController;
+use App\Http\Controllers\CardDocumentController;
 use App\Http\Controllers\CardImageController;
 use App\Http\Controllers\CardLinkController;
 use App\Http\Controllers\CardTemplateController;
@@ -96,6 +97,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/boards/{boardId}/cards/{cardId}/comments', [CardCommentController::class, 'index']);
     Route::post('/boards/{boardId}/cards/{cardId}/comments', [CardCommentController::class, 'store']);
+    Route::put('/boards/{boardId}/cards/{cardId}/comments/{commentId}', [CardCommentController::class, 'update']);
     Route::delete('/boards/{boardId}/cards/{cardId}/comments/{commentId}', [CardCommentController::class, 'destroy']);
 
     // WhatsApp thread on a card: read the conversation, reply to the customer.
@@ -109,6 +111,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/boards/{boardId}/cards/{cardId}/attachments', [CardImageController::class, 'store']);
     Route::delete('/boards/{boardId}/cards/{cardId}/attachments/{imageId}', [CardImageController::class, 'destroy']);
+
+    Route::post('/boards/{boardId}/cards/{cardId}/documents', [CardDocumentController::class, 'store']);
+    Route::get('/boards/{boardId}/cards/{cardId}/documents/{documentId}/download', [CardDocumentController::class, 'download']);
+    Route::delete('/boards/{boardId}/cards/{cardId}/documents/{documentId}', [CardDocumentController::class, 'destroy']);
 
     Route::post('/boards/{boardId}/cards/{cardId}/links', [CardLinkController::class, 'store']);
     Route::post('/boards/{boardId}/cards/{cardId}/links/{linkId}/refresh', [CardLinkController::class, 'refresh']);
