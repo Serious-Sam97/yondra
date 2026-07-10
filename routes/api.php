@@ -11,6 +11,7 @@ use App\Http\Controllers\CardController;
 use App\Http\Controllers\CardImageController;
 use App\Http\Controllers\CardLinkController;
 use App\Http\Controllers\CardTemplateController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GitHubWebhookController;
 use App\Http\Controllers\ImageUploadController;
 use App\Http\Controllers\NotificationController;
@@ -19,11 +20,15 @@ use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectMemberController;
 use App\Http\Controllers\QaController;
+use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SectionController;
 use App\Http\Controllers\SprintController;
 use App\Http\Controllers\StepController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\TestPlanController;
+use App\Http\Controllers\WhatsappAutomationController;
+use App\Http\Controllers\WhatsappController;
+use App\Http\Controllers\WhatsappWebhookController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Route;
@@ -42,12 +47,22 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 // Inbound GitHub webhooks — public, authenticated per-board via HMAC signature.
 Route::post('/webhooks/github/{boardId}', [GitHubWebhookController::class, 'handle']);
 
+// Inbound WhatsApp Cloud API webhooks — public: GET verify handshake, POST HMAC-signed.
+Route::get('/webhooks/whatsapp/{boardId}', [WhatsappWebhookController::class, 'verify']);
+Route::post('/webhooks/whatsapp/{boardId}', [WhatsappWebhookController::class, 'handle']);
+
+// Inbound Sentinel CI results — public, authenticated by the case's unguessable ci_token.
+Route::post('/webhooks/qa-ci/{token}', [QaController::class, 'ciHook']);
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
     Route::put('/user', [AuthController::class, 'updateProfile']);
     Route::put('/user/password', [AuthController::class, 'updatePassword']);
+
+    Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/search', [SearchController::class, 'index']);
 
     Route::get('/boards', [BoardController::class, 'index']);
     Route::post('/boards', [BoardController::class, 'store']);
@@ -83,6 +98,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/boards/{boardId}/cards/{cardId}/comments', [CardCommentController::class, 'store']);
     Route::delete('/boards/{boardId}/cards/{cardId}/comments/{commentId}', [CardCommentController::class, 'destroy']);
 
+    // WhatsApp thread on a card: read the conversation, reply to the customer.
+    Route::get('/boards/{boardId}/cards/{cardId}/whatsapp', [WhatsappController::class, 'show']);
+    Route::post('/boards/{boardId}/cards/{cardId}/whatsapp', [WhatsappController::class, 'store']);
+
+    // WhatsApp stage automations (owner-level board config).
+    Route::get('/boards/{boardId}/whatsapp/automations', [WhatsappAutomationController::class, 'index']);
+    Route::put('/boards/{boardId}/whatsapp/automations/{sectionId}', [WhatsappAutomationController::class, 'upsert']);
+    Route::delete('/boards/{boardId}/whatsapp/automations/{sectionId}', [WhatsappAutomationController::class, 'destroy']);
+
     Route::post('/boards/{boardId}/cards/{cardId}/attachments', [CardImageController::class, 'store']);
     Route::delete('/boards/{boardId}/cards/{cardId}/attachments/{imageId}', [CardImageController::class, 'destroy']);
 
@@ -106,6 +130,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/boards/{boardId}/cards/{cardId}/qa/cases/{caseId}', [QaController::class, 'destroyCase']);
     Route::post('/boards/{boardId}/cards/{cardId}/qa/cases/{caseId}/runs', [QaController::class, 'storeRun']);
     Route::post('/boards/{boardId}/cards/{cardId}/qa/cases/{caseId}/bug', [QaController::class, 'linkBug']);
+    Route::post('/boards/{boardId}/cards/{cardId}/qa/cases/{caseId}/verdict', [QaController::class, 'setVerdict']);
+    Route::post('/boards/{boardId}/cards/{cardId}/qa/cases/{caseId}/ci-token', [QaController::class, 'ciToken']);
 
     // Sentinel (QA) — global reusable-step library (per board). Editing propagates.
     Route::get('/boards/{boardId}/qa/steps', [StepController::class, 'index']);

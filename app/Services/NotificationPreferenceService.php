@@ -18,9 +18,10 @@ class NotificationPreferenceService
 {
     /** Channels a notification can travel through. `in_app` covers the live bell + toast. */
     public const CHANNELS = [
-        ['key' => 'in_app', 'label' => 'In-app'],
-        ['key' => 'email',  'label' => 'Email'],
-        ['key' => 'push',   'label' => 'Mobile push'],
+        ['key' => 'in_app',   'label' => 'In-app'],
+        ['key' => 'email',    'label' => 'Email'],
+        ['key' => 'push',     'label' => 'Mobile push'],
+        ['key' => 'whatsapp', 'label' => 'WhatsApp'],
     ];
 
     /**
@@ -42,15 +43,17 @@ class NotificationPreferenceService
     /** Default channel state per event type. */
     public function defaults(): array
     {
+        // `whatsapp` defaults off everywhere: it's opt-in (costs money, needs an
+        // approved template + the user's number).
         return [
-            'assignment' => ['in_app' => true, 'email' => true,  'push' => true],
-            'mention' => ['in_app' => true, 'email' => true,  'push' => true],
-            'comment' => ['in_app' => true, 'email' => false, 'push' => false],
-            'card_status' => ['in_app' => true, 'email' => false, 'push' => false],
-            'due_date' => ['in_app' => true, 'email' => true,  'push' => true],
-            'sharing' => ['in_app' => true, 'email' => true,  'push' => false],
-            'chat' => ['in_app' => true, 'email' => false, 'push' => false],
-            'qa_sprint' => ['in_app' => true, 'email' => false, 'push' => false],
+            'assignment' => ['in_app' => true, 'email' => true,  'push' => true,  'whatsapp' => false],
+            'mention' => ['in_app' => true, 'email' => true,  'push' => true,  'whatsapp' => false],
+            'comment' => ['in_app' => true, 'email' => false, 'push' => false, 'whatsapp' => false],
+            'card_status' => ['in_app' => true, 'email' => false, 'push' => false, 'whatsapp' => false],
+            'due_date' => ['in_app' => true, 'email' => true,  'push' => true,  'whatsapp' => false],
+            'sharing' => ['in_app' => true, 'email' => true,  'push' => false, 'whatsapp' => false],
+            'chat' => ['in_app' => true, 'email' => false, 'push' => false, 'whatsapp' => false],
+            'qa_sprint' => ['in_app' => true, 'email' => false, 'push' => false, 'whatsapp' => false],
         ];
     }
 

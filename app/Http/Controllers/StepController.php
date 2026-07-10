@@ -26,6 +26,9 @@ class StepController extends Controller
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'content' => ['nullable', 'string'],
+            'gherkin_lines' => ['sometimes', 'nullable', 'array'],
+            'gherkin_lines.*.keyword' => ['required_with:gherkin_lines', 'string', 'max:16'],
+            'gherkin_lines.*.text' => ['nullable', 'string'],
         ]);
         $step = ReusableStep::create(array_merge($validated, ['board_id' => $boardId]));
 
@@ -40,6 +43,9 @@ class StepController extends Controller
         $validated = $request->validate([
             'title' => ['sometimes', 'string', 'max:255'],
             'content' => ['sometimes', 'nullable', 'string'],
+            'gherkin_lines' => ['sometimes', 'nullable', 'array'],
+            'gherkin_lines.*.keyword' => ['required_with:gherkin_lines', 'string', 'max:16'],
+            'gherkin_lines.*.text' => ['nullable', 'string'],
         ]);
         $step->update($validated);
 
@@ -68,7 +74,7 @@ class StepController extends Controller
 
     private function serialize(ReusableStep $s): array
     {
-        return ['id' => $s->id, 'board_id' => $s->board_id, 'title' => $s->title, 'content' => $s->content];
+        return ['id' => $s->id, 'board_id' => $s->board_id, 'title' => $s->title, 'content' => $s->content, 'gherkin_lines' => $s->gherkin_lines ?? []];
     }
 
     private function broadcast(int $boardId, string $type, ReusableStep $step, int $status = 200)

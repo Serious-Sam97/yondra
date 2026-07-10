@@ -79,6 +79,12 @@ class BoardController extends Controller
             'default_permission' => ['sometimes', 'in:read,write,owner'],
             'github_repo' => ['sometimes', 'nullable', 'string', 'regex:/^[\w.-]+\/[\w.-]+$/'],
             'github_token' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'whatsapp_provider' => ['sometimes', 'nullable', 'in:meta,bsp'],
+            'whatsapp_phone_number_id' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'whatsapp_waba_id' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'whatsapp_token' => ['sometimes', 'nullable', 'string', 'max:512'],
+            'whatsapp_app_secret' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'whatsapp_verify_token' => ['sometimes', 'nullable', 'string', 'max:255'],
         ]);
 
         $this->authorizeProject($validated['project_id'] ?? null);

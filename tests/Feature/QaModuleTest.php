@@ -137,6 +137,99 @@ it('couples a bug: resolving it flips the case to awaiting-retest, a new run cle
         ->and($res->json('latest_status'))->toBe('passed');
 });
 
+it('sets a human verdict independent of run status, and clears it', function () {
+    $owner = User::factory()->create();
+    [$board, $card] = qaCard($owner);
+    $base = "/api/boards/{$board->id}/cards/{$card->id}/qa";
+    $id = $this->actingAs($owner)->postJson("{$base}/cases", ['title' => 'C'])->json('id');
+
+    // A passing run, yet a human rejects it — the verdict wins.
+    $this->actingAs($owner)->postJson("{$base}/cases/{$id}/runs", ['status' => 'passed'])->assertCreated();
+    $res = $this->actingAs($owner)->postJson("{$base}/cases/{$id}/verdict", ['verdict' => 'rejected'])->assertOk();
+    expect($res->json('verdict'))->toBe('rejected')
+        ->and($res->json('verdict_by.id'))->toBe($owner->id)
+        ->and($res->json('latest_status'))->toBe('passed');
+
+    // Clearing the verdict.
+    $cleared = $this->actingAs($owner)->postJson("{$base}/cases/{$id}/verdict", ['verdict' => null])->assertOk();
+    expect($cleared->json('verdict'))->toBeNull()
+        ->and($cleared->json('verdict_by'))->toBeNull();
+
+    // Bogus verdicts are rejected.
+    $this->actingAs($owner)->postJson("{$base}/cases/{$id}/verdict", ['verdict' => 'lgtm'])->assertStatus(422);
+});
+
+it('stores a per-block checklist layer on an append-only run', function () {
+    $owner = User::factory()->create();
+    [$board, $card] = qaCard($owner);
+    $base = "/api/boards/{$board->id}/cards/{$card->id}/qa";
+    $id = $this->actingAs($owner)->postJson("{$base}/cases", ['title' => 'C'])->json('id');
+
+    $items = [
+        ['block_key' => 'g1', 'block_title' => 'Login', 'ok' => true],
+        ['block_key' => 'l_a', 'block_title' => 'Cupom', 'ok' => false, 'bug_card_id' => 105, 'evidence' => [['url' => 'x.png', 'kind' => 'image']]],
+    ];
+    $res = $this->actingAs($owner)->postJson("{$base}/cases/{$id}/runs", ['status' => 'failed', 'items' => $items])->assertCreated();
+
+    expect($res->json('runs.0.status'))->toBe('failed')
+        ->and($res->json('runs.0.source'))->toBe('manual')
+        ->and($res->json('runs.0.items'))->toHaveCount(2)
+        ->and($res->json('runs.0.items.1.ok'))->toBeFalse()
+        ->and($res->json('runs.0.items.1.bug_card_id'))->toBe(105);
+});
+
+it('accepts CI results via the public webhook token and rejects a bad token', function () {
+    $owner = User::factory()->create();
+    [$board, $card] = qaCard($owner);
+    $base = "/api/boards/{$board->id}/cards/{$card->id}/qa";
+    $id = $this->actingAs($owner)->postJson("{$base}/cases", ['title' => 'C'])->json('id');
+
+    $token = $this->actingAs($owner)->postJson("{$base}/cases/{$id}/ci-token")->assertOk()->json('ci_token');
+    expect($token)->not->toBeNull();
+
+    // Public — no auth. The unguessable token IS the credential.
+    $this->postJson("/api/webhooks/qa-ci/{$token}", ['status' => 'passed', 'logs' => 'ci green'])
+        ->assertCreated()->assertJson(['ok' => true]);
+
+    $run = TestRun::where('test_case_id', $id)->latest('id')->first();
+    expect($run->status)->toBe('passed')->and($run->source)->toBe('ci');
+
+    $this->postJson('/api/webhooks/qa-ci/not-a-real-token', ['status' => 'passed'])->assertNotFound();
+});
+
+it('persists local blocks and per-block evidence inside step_refs', function () {
+    $owner = User::factory()->create();
+    [$board, $card] = qaCard($owner);
+    $base = "/api/boards/{$board->id}/cards/{$card->id}/qa";
+    $id = $this->actingAs($owner)->postJson("{$base}/cases", ['title' => 'C'])->json('id');
+
+    $refs = [
+        ['local_key' => 'l_1', 'scope' => 'local', 'title' => 'Validar cupom', 'lines' => [
+            ['keyword' => 'DADO', 'text' => 'no checkout'],
+            ['keyword' => 'ENTÃO', 'text' => 'QR exibido'],
+        ], 'evidence' => [['url' => 'doc.png', 'kind' => 'image']]],
+    ];
+    $res = $this->actingAs($owner)->putJson("{$base}/cases/{$id}", ['step_refs' => $refs])->assertOk();
+
+    expect($res->json('step_refs.0.title'))->toBe('Validar cupom')
+        ->and($res->json('step_refs.0.lines'))->toHaveCount(2)
+        ->and($res->json('step_refs.0.evidence.0.url'))->toBe('doc.png');
+});
+
+it('stores structured gherkin lines on a reusable step', function () {
+    $owner = User::factory()->create();
+    [$board] = qaCard($owner);
+    $stepBase = "/api/boards/{$board->id}/qa/steps";
+
+    $res = $this->actingAs($owner)->postJson($stepBase, [
+        'title' => 'Login',
+        'gherkin_lines' => [['keyword' => 'QUANDO', 'text' => 'faz login']],
+    ])->assertCreated();
+
+    expect($res->json('gherkin_lines.0.keyword'))->toBe('QUANDO')
+        ->and($res->json('gherkin_lines.0.text'))->toBe('faz login');
+});
+
 it('manages test plans and links cases to them', function () {
     $owner = User::factory()->create();
     [$board, $card] = qaCard($owner);

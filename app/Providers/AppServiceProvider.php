@@ -31,6 +31,14 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(ProjectRepository::class, ProjectModelRepository::class);
         $this->app->bind(SectionRepository::class, SectionModelRepository::class);
         $this->app->bind(TagRepository::class, TagModelRepository::class);
+
+        // Default WhatsApp driver (config-selected). Per-board overrides are resolved
+        // by WhatsappService::driverFor(); this binding serves board-less contexts.
+        $this->app->bind(\App\Services\Whatsapp\WhatsappDriver::class, function () {
+            return config('services.whatsapp.driver') === 'bsp'
+                ? $this->app->make(\App\Services\Whatsapp\BspDriver::class)
+                : $this->app->make(\App\Services\Whatsapp\MetaCloudDriver::class);
+        });
     }
 
     public function boot(): void

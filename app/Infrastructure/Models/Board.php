@@ -13,18 +13,22 @@ class Board extends Model
         'user_id', 'project_id', 'name', 'type', 'currency', 'done_section_id', 'qa_enabled', 'description', 'ticket_prefix',
         'next_ticket_number', 'background', 'default_permission', 'archived_at',
         'github_repo', 'github_token', 'github_webhook_secret',
+        'whatsapp_provider', 'whatsapp_phone_number_id', 'whatsapp_waba_id',
+        'whatsapp_token', 'whatsapp_app_secret', 'whatsapp_verify_token',
     ];
 
     protected $casts = [
         'archived_at' => 'datetime',
         'github_token' => 'encrypted',
+        'whatsapp_token' => 'encrypted',
+        'whatsapp_app_secret' => 'encrypted',
         'done_section_id' => 'integer',
         'qa_enabled' => 'boolean',
     ];
 
-    // Never expose the raw token to the client; capabilities are surfaced via
-    // github_connected in the repository payload instead.
-    protected $hidden = ['github_token'];
+    // Never expose raw secrets to the client; capabilities are surfaced via
+    // *_connected flags in the repository payload instead.
+    protected $hidden = ['github_token', 'whatsapp_token', 'whatsapp_app_secret'];
 
     /**
      * Does landing a card in this section mark it done/closed? Uses the board's

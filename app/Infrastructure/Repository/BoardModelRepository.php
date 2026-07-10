@@ -74,6 +74,14 @@ class BoardModelRepository implements BoardRepository
         }
         $board->makeHidden('github_token');
 
+        // WhatsApp: expose connected state, hide the secrets. The verify token is
+        // needed to configure the Meta webhook, so it's shown to managers only.
+        $board->whatsapp_connected = filled($board->whatsapp_token);
+        if (! $board->can_manage) {
+            $board->whatsapp_verify_token = null;
+        }
+        $board->makeHidden(['whatsapp_token', 'whatsapp_app_secret']);
+
         return $board;
     }
 
@@ -140,6 +148,18 @@ class BoardModelRepository implements BoardRepository
             'github_repo' => array_key_exists('github_repo', $request)
                                 ? $request['github_repo']
                                 : $board->github_repo,
+            'whatsapp_provider' => array_key_exists('whatsapp_provider', $request)
+                                ? $request['whatsapp_provider']
+                                : $board->whatsapp_provider,
+            'whatsapp_phone_number_id' => array_key_exists('whatsapp_phone_number_id', $request)
+                                ? $request['whatsapp_phone_number_id']
+                                : $board->whatsapp_phone_number_id,
+            'whatsapp_waba_id' => array_key_exists('whatsapp_waba_id', $request)
+                                ? $request['whatsapp_waba_id']
+                                : $board->whatsapp_waba_id,
+            'whatsapp_verify_token' => array_key_exists('whatsapp_verify_token', $request)
+                                ? ($request['whatsapp_verify_token'] ?: null)
+                                : $board->whatsapp_verify_token,
         ]);
 
         // Token is optional on every save; only overwrite when a non-empty value is
@@ -153,9 +173,23 @@ class BoardModelRepository implements BoardRepository
             $board->save();
         }
 
+        // WhatsApp secrets follow the same rule: overwrite only on a non-empty value.
+        foreach (['whatsapp_token', 'whatsapp_app_secret'] as $secret) {
+            if (array_key_exists($secret, $request)) {
+                $value = $request[$secret];
+                $board->{$secret} = ($value !== null && $value !== '') ? $value : null;
+            }
+        }
+        // On first connect, auto-issue a verify token if the manager didn't set one.
+        if ($board->whatsapp_token && ! $board->whatsapp_verify_token) {
+            $board->whatsapp_verify_token = bin2hex(random_bytes(16));
+        }
+        $board->save();
+
         $fresh = $board->fresh()->load(['owner:id,name', 'sharedWith:id,name'])->loadCount('cards');
         $fresh->github_connected = filled($fresh->github_token);
-        $fresh->makeHidden('github_token');
+        $fresh->whatsapp_connected = filled($fresh->whatsapp_token);
+        $fresh->makeHidden(['github_token', 'whatsapp_token', 'whatsapp_app_secret']);
 
         return $fresh;
     }

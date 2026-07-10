@@ -2,6 +2,7 @@
 
 namespace App\Infrastructure\Models;
 
+use App\Jobs\SendStageWhatsappJob;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -9,6 +10,17 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Card extends Model
 {
+    protected static function booted(): void
+    {
+        // Any path that moves a card into a new section (drag-reorder or edit) fires
+        // this. The queued job is a cheap no-op unless a stage automation is configured.
+        static::updated(function (Card $card): void {
+            if ($card->wasChanged('section_id')) {
+                SendStageWhatsappJob::dispatch((int) $card->id, (int) $card->section_id);
+            }
+        });
+    }
+
     protected $fillable = [
         'board_id', 'section_id', 'assigned_user_id', 'created_by_user_id',
         'name', 'description', 'due_date', 'due_reminder_sent_at', 'priority', 'position', 'archived_at', 'done_at',
@@ -75,6 +87,11 @@ class Card extends Model
     public function comments(): HasMany
     {
         return $this->hasMany(CardComment::class)->latest();
+    }
+
+    public function whatsappConversations(): HasMany
+    {
+        return $this->hasMany(WhatsappConversation::class);
     }
 
     public function subtasks(): HasMany

@@ -13,6 +13,7 @@ class TestCase extends Model
         'board_id', 'card_id', 'title', 'type', 'qa_planner_user_id', 'target_env',
         'gherkin', 'preconditions', 'postconditions', 'step_refs', 'data_matrix',
         'bug_card_id', 'awaiting_retest', 'position', 'version', 'edited_by_user_id',
+        'verdict', 'verdict_by_user_id', 'verdict_at', 'ci_token',
     ];
 
     protected $casts = [
@@ -21,6 +22,7 @@ class TestCase extends Model
         'step_refs' => 'array',
         'data_matrix' => 'array',
         'awaiting_retest' => 'boolean',
+        'verdict_at' => 'datetime',
     ];
 
     // Single source of truth for the client-facing case shape (used by QaController and
@@ -28,7 +30,7 @@ class TestCase extends Model
     // the newest run, else "not_run".
     public function toSnapshot(): array
     {
-        $this->loadMissing(['planner:id,name', 'editor:id,name', 'runs.executor:id,name', 'plans:id']);
+        $this->loadMissing(['planner:id,name', 'editor:id,name', 'verdictBy:id,name', 'runs.executor:id,name', 'plans:id']);
 
         $runs = $this->runs->map(fn (TestRun $r) => [
             'id' => $r->id,
@@ -39,6 +41,8 @@ class TestCase extends Model
             'executed_at' => optional($r->executed_at)->toIso8601String(),
             'evidence' => $r->evidence ?? [],
             'logs' => $r->logs,
+            'items' => $r->items ?? [],
+            'source' => $r->source ?? 'manual',
         ])->values()->all();
 
         $latest = $this->awaiting_retest ? 'awaiting_retest' : ($runs[0]['status'] ?? 'not_run');
@@ -58,6 +62,10 @@ class TestCase extends Model
             'test_plan_ids' => $this->plans->pluck('id')->all(),
             'bug_card_id' => $this->bug_card_id,
             'awaiting_retest' => (bool) $this->awaiting_retest,
+            'verdict' => $this->verdict,
+            'verdict_by' => $this->verdictBy ? ['id' => $this->verdictBy->id, 'name' => $this->verdictBy->name] : null,
+            'verdict_at' => optional($this->verdict_at)->toIso8601String(),
+            'ci_token' => $this->ci_token,
             'position' => $this->position,
             'version' => $this->version,
             'planner' => $this->planner ? ['id' => $this->planner->id, 'name' => $this->planner->name] : null,
@@ -85,6 +93,11 @@ class TestCase extends Model
     public function editor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'edited_by_user_id');
+    }
+
+    public function verdictBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verdict_by_user_id');
     }
 
     // Runs newest-first — the card header reflects runs()->first(). `id` breaks ties

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Notifications;
 
+use App\Notifications\Channels\WhatsappChannel;
 use App\Services\NotificationPreferenceService;
 use App\Services\Notifier;
 use Illuminate\Notifications\Notification;
@@ -34,7 +35,42 @@ abstract class BaseYondraNotification extends Notification
             $via[] = 'database';
         }
 
+        // WhatsApp only when opted in, a number is on file, and a template is configured.
+        if (in_array('whatsapp', $channels, true)
+            && ! empty($notifiable->whatsapp_number)
+            && config('services.whatsapp.notification_template')) {
+            $via[] = WhatsappChannel::class;
+        }
+
         return $via;
+    }
+
+    /** Whether the recipient wants the WhatsApp channel for this event type. */
+    public function wantsWhatsapp(object $notifiable): bool
+    {
+        return in_array('whatsapp', $this->enabledChannels($notifiable), true);
+    }
+
+    /**
+     * How this notification renders onto the WhatsApp channel: an approved template
+     * plus its body parameters. Defaults to the configured generic alert template with
+     * the human message as its single body variable.
+     *
+     * @return array{board_id:?int,template:string,language:string,components:array}
+     */
+    public function toWhatsapp(object $notifiable): array
+    {
+        $payload = $this->toPayload();
+
+        return [
+            'board_id' => $payload['board_id'] ?? null,
+            'template' => (string) config('services.whatsapp.notification_template'),
+            'language' => (string) config('services.whatsapp.notification_language', 'en'),
+            'components' => [[
+                'type' => 'body',
+                'parameters' => [['type' => 'text', 'text' => $payload['message']]],
+            ]],
+        ];
     }
 
     /** Whether the recipient wants the in-app (bell + live toast) channel. */
@@ -52,21 +88,21 @@ abstract class BaseYondraNotification extends Notification
     /** Email subject line. Subclasses may override for something more specific. */
     public function mailSubject(): string
     {
-        return 'Yondra · ' . $this->mailEyebrow();
+        return 'Yondra · '.$this->mailEyebrow();
     }
 
     /** Short uppercase-ish label shown in the email header / eyebrow. */
     public function mailEyebrow(): string
     {
         return match ($this->eventType()) {
-            'assignment'  => 'Assignment',
-            'mention'     => 'Mention',
-            'comment'     => 'New comment',
+            'assignment' => 'Assignment',
+            'mention' => 'Mention',
+            'comment' => 'New comment',
             'card_status' => 'Card update',
-            'due_date'    => 'Due soon',
-            'sharing'     => 'Invite',
-            'chat'        => 'Board chat',
-            default       => 'Notification',
+            'due_date' => 'Due soon',
+            'sharing' => 'Invite',
+            'chat' => 'Board chat',
+            default => 'Notification',
         };
     }
 
