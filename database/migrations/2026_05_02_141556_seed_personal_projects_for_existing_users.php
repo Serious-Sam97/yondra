@@ -11,18 +11,18 @@ return new class extends Migration
 
         foreach ($users as $user) {
             $projectId = DB::table('projects')->insertGetId([
-                'owner_id'   => $user->id,
-                'name'       => 'Personal',
+                'owner_id' => $user->id,
+                'name' => 'Personal',
                 'description' => null,
-                'color'      => '#1976D2',
+                'color' => '#1976D2',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
 
             DB::table('project_user')->insert([
                 'project_id' => $projectId,
-                'user_id'    => $user->id,
-                'role'       => 'owner',
+                'user_id' => $user->id,
+                'role' => 'owner',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

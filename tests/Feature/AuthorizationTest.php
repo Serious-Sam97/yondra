@@ -16,14 +16,14 @@ use App\Infrastructure\Models\User;
  */
 function crossTenantSetup(): array
 {
-    $attacker      = User::factory()->create();
+    $attacker = User::factory()->create();
     $attackerBoard = Board::create(['user_id' => $attacker->id, 'name' => 'Attacker board', 'description' => '']);
     $attackerSection = Section::create(['board_id' => $attackerBoard->id, 'name' => 'To Do']);
 
-    $victim        = User::factory()->create();
-    $victimBoard   = Board::create(['user_id' => $victim->id, 'name' => 'Victim board', 'description' => '']);
+    $victim = User::factory()->create();
+    $victimBoard = Board::create(['user_id' => $victim->id, 'name' => 'Victim board', 'description' => '']);
     $victimSection = Section::create(['board_id' => $victimBoard->id, 'name' => 'Private', 'order' => 5]);
-    $victimCard    = Card::create(['board_id' => $victimBoard->id, 'section_id' => $victimSection->id, 'name' => 'Secret task', 'description' => '']);
+    $victimCard = Card::create(['board_id' => $victimBoard->id, 'section_id' => $victimSection->id, 'name' => 'Secret task', 'description' => '']);
 
     return compact('attacker', 'attackerBoard', 'attackerSection', 'victim', 'victimBoard', 'victimSection', 'victimCard');
 }
@@ -67,8 +67,8 @@ it('rejects creating a card in a section of another board', function () {
 
     $this->actingAs($attacker)
         ->postJson("/api/boards/{$attackerBoard->id}/cards", [
-            'section_id'  => $victimSection->id,
-            'name'        => 'Injected card',
+            'section_id' => $victimSection->id,
+            'name' => 'Injected card',
             'description' => '',
         ])
         ->assertUnprocessable()
@@ -162,10 +162,10 @@ it('rejects attaching a tag from another board to a card', function () {
 
     $this->actingAs($attacker)
         ->postJson("/api/boards/{$attackerBoard->id}/cards", [
-            'section_id'  => $attackerSection->id,
-            'name'        => 'Card',
+            'section_id' => $attackerSection->id,
+            'name' => 'Card',
             'description' => '',
-            'tag_ids'     => [$victimTag->id],
+            'tag_ids' => [$victimTag->id],
         ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['tag_ids.0']);
@@ -173,8 +173,8 @@ it('rejects attaching a tag from another board to a card', function () {
 
 it('rejects creating a board inside a project the user does not belong to', function () {
     $attacker = User::factory()->create();
-    $victim   = User::factory()->create();
-    $project  = Project::create(['owner_id' => $victim->id, 'name' => 'Victim project']);
+    $victim = User::factory()->create();
+    $project = Project::create(['owner_id' => $victim->id, 'name' => 'Victim project']);
 
     $this->actingAs($attacker)
         ->postJson('/api/boards', ['name' => 'Trojan board', 'description' => '', 'project_id' => $project->id])
@@ -185,9 +185,9 @@ it('rejects creating a board inside a project the user does not belong to', func
 
 it('rejects moving a board into a project the user does not belong to', function () {
     $attacker = User::factory()->create();
-    $board    = Board::create(['user_id' => $attacker->id, 'name' => 'My board', 'description' => '']);
-    $victim   = User::factory()->create();
-    $project  = Project::create(['owner_id' => $victim->id, 'name' => 'Victim project']);
+    $board = Board::create(['user_id' => $attacker->id, 'name' => 'My board', 'description' => '']);
+    $victim = User::factory()->create();
+    $project = Project::create(['owner_id' => $victim->id, 'name' => 'Victim project']);
 
     $this->actingAs($attacker)
         ->putJson("/api/boards/{$board->id}", ['project_id' => $project->id])
@@ -197,8 +197,8 @@ it('rejects moving a board into a project the user does not belong to', function
 });
 
 it('allows a project member to create a board in that project', function () {
-    $owner   = User::factory()->create();
-    $member  = User::factory()->create();
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
     $project = Project::create(['owner_id' => $owner->id, 'name' => 'Shared project']);
     $project->members()->attach($member->id, ['role' => 'member']);
 
@@ -212,8 +212,8 @@ it('allows a project member to create a board in that project', function () {
 // --- Board deletion is owner-only -------------------------------------------
 
 it('rejects deleting a board you only have a read/write share on', function () {
-    $owner  = User::factory()->create();
-    $board  = Board::create(['user_id' => $owner->id, 'name' => 'Keep me', 'description' => '']);
+    $owner = User::factory()->create();
+    $board = Board::create(['user_id' => $owner->id, 'name' => 'Keep me', 'description' => '']);
     $reader = User::factory()->create();
     $writer = User::factory()->create();
     BoardShare::create(['board_id' => $board->id, 'user_id' => $reader->id, 'permission' => 'read']);
@@ -226,8 +226,8 @@ it('rejects deleting a board you only have a read/write share on', function () {
 });
 
 it('rejects deleting a board you have no access to', function () {
-    $owner   = User::factory()->create();
-    $board   = Board::create(['user_id' => $owner->id, 'name' => 'Private', 'description' => '']);
+    $owner = User::factory()->create();
+    $board = Board::create(['user_id' => $owner->id, 'name' => 'Private', 'description' => '']);
     $stranger = User::factory()->create();
 
     $this->actingAs($stranger)->deleteJson("/api/boards/{$board->id}")->assertForbidden();

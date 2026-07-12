@@ -8,12 +8,13 @@ use App\Infrastructure\Models\User;
 function makeBoardWithSection(User $user, ?string $prefix = null): array
 {
     $board = Board::create([
-        'user_id'       => $user->id,
-        'name'          => 'Board',
-        'description'   => '',
+        'user_id' => $user->id,
+        'name' => 'Board',
+        'description' => '',
         'ticket_prefix' => $prefix,
     ]);
     $section = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
+
     return [$board, $section];
 }
 
@@ -23,7 +24,7 @@ it('assigns fresh per-board ticket numbers starting at 1', function () {
 
     $this->actingAs($user);
 
-    $first  = $this->postJson("/api/boards/{$board->id}/cards", ['section_id' => $section->id, 'name' => 'One'])->json();
+    $first = $this->postJson("/api/boards/{$board->id}/cards", ['section_id' => $section->id, 'name' => 'One'])->json();
     $second = $this->postJson("/api/boards/{$board->id}/cards", ['section_id' => $section->id, 'name' => 'Two'])->json();
 
     expect($first['ticket_number'])->toBe(1);

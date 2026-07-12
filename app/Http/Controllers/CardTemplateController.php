@@ -11,6 +11,7 @@ class CardTemplateController extends Controller
     public function index(int $boardId)
     {
         $this->authorizeBoard($boardId);
+
         return CardTemplate::where('board_id', $boardId)->latest()->get();
     }
 
@@ -18,15 +19,16 @@ class CardTemplateController extends Controller
     {
         $this->authorizeOwner($boardId);
         $validated = $request->validate([
-            'name'          => ['required', 'string', 'max:100'],
+            'name' => ['required', 'string', 'max:100'],
             'template_data' => ['required', 'array'],
         ]);
         $template = CardTemplate::create([
-            'board_id'      => $boardId,
-            'user_id'       => Auth::id(),
-            'name'          => $validated['name'],
+            'board_id' => $boardId,
+            'user_id' => Auth::id(),
+            'name' => $validated['name'],
             'template_data' => $validated['template_data'],
         ]);
+
         return response()->json($template, 201);
     }
 
@@ -34,6 +36,7 @@ class CardTemplateController extends Controller
     {
         $this->authorizeOwner($boardId);
         CardTemplate::where('board_id', $boardId)->findOrFail($templateId)->delete();
+
         return response()->json(null, 204);
     }
 }

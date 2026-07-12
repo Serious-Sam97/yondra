@@ -100,7 +100,7 @@ class EntityController extends Controller
 
         // Files also live on disk — remove the blob alongside the row.
         if ($record instanceof CardImage) {
-            Storage::disk('public')->delete($record->path);
+            Storage::disk($record->disk ?: 'public')->delete($record->path);
         }
         if ($record instanceof CardDocument) {
             Storage::disk($record->disk ?: 'local')->delete($record->path);

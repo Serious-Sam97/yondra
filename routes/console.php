@@ -10,3 +10,6 @@ Artisan::command('inspire', function () {
 
 // Fire due-soon reminders hourly so a card entering its 24h window is caught promptly.
 Schedule::command('notifications:due-reminders')->hourly();
+
+// Expired Sanctum tokens are rejected at auth time but linger in the table — sweep daily.
+Schedule::command('sanctum:prune-expired --hours=24')->daily();

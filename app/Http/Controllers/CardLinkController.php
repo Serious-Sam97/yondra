@@ -6,16 +6,13 @@ use App\Events\BoardEvent;
 use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\CardLink;
-use App\Infrastructure\Repository\CardModelRepository;
 use App\Services\GitHubService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class CardLinkController extends Controller
 {
-    public function __construct(private GitHubService $github)
-    {
-    }
+    public function __construct(private GitHubService $github) {}
 
     public function store(Request $request, int $boardId, int $cardId)
     {
@@ -27,23 +24,23 @@ class CardLinkController extends Controller
         ]);
 
         $parts = $this->github->parse($validated['url']);
-        if (!$parts) {
+        if (! $parts) {
             return response()->json(['message' => 'That is not a GitHub pull request or issue URL.'], 422);
         }
 
         $link = CardLink::firstOrNew([
             'card_id' => $card->id,
-            'url'     => $validated['url'],
+            'url' => $validated['url'],
         ]);
         $link->fill([
-            'board_id'           => $boardId,
+            'board_id' => $boardId,
             'created_by_user_id' => Auth::id(),
-            'provider'           => 'github',
-            'type'               => $parts['type'],
-            'owner'              => $parts['owner'],
-            'repo'               => $parts['repo'],
-            'number'             => $parts['number'],
-            'html_url'           => $validated['url'],
+            'provider' => 'github',
+            'type' => $parts['type'],
+            'owner' => $parts['owner'],
+            'repo' => $parts['repo'],
+            'number' => $parts['number'],
+            'html_url' => $validated['url'],
         ]);
         $link->save();
 
@@ -72,6 +69,7 @@ class CardLinkController extends Controller
         CardLink::where('card_id', $card->id)->findOrFail($linkId)->delete();
 
         $this->broadcastCard($boardId, $card->id);
+
         return response()->json(null, 204);
     }
 
@@ -80,10 +78,11 @@ class CardLinkController extends Controller
     {
         $card = Card::with(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links', 'documents'])->findOrFail($cardId);
         $board = Board::find($boardId);
-        $card->ticket_key = CardModelRepository::composeTicketKey($board?->ticket_prefix, $card->ticket_number);
+        $card->ticket_key = Card::ticketKey($board?->ticket_prefix, $card->ticket_number);
         $payload = $card->toArray();
 
         broadcast(new BoardEvent($boardId, 'card.updated', $payload));
+
         return $payload;
     }
 }

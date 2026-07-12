@@ -21,6 +21,16 @@ class Card extends Model
         });
     }
 
+    /** Human-facing card key: "YON-42" when a prefix is set, else "#42". */
+    public static function ticketKey(?string $prefix, ?int $number): string
+    {
+        if ($number === null) {
+            return '';
+        }
+
+        return $prefix ? "{$prefix}-{$number}" : "#{$number}";
+    }
+
     protected $fillable = [
         'board_id', 'section_id', 'assigned_user_id', 'created_by_user_id',
         'name', 'description', 'due_date', 'due_reminder_sent_at', 'priority', 'position', 'archived_at', 'done_at',

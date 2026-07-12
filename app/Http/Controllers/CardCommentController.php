@@ -12,12 +12,22 @@ use Illuminate\Support\Facades\Auth;
 
 class CardCommentController extends Controller
 {
+    /**
+     * Newest-first pages of the card's comment thread (simplePaginate: `data` +
+     * `next_page_url`). The UI renders newest at the top and appends older pages
+     * below via `?page=N`, so no client-side reordering is ever needed.
+     * `id` tie-breaks same-second timestamps to keep page boundaries stable.
+     */
     public function index(int $boardId, int $cardId)
     {
         $this->authorizeBoard($boardId);
         $card = $this->boardCard($boardId, $cardId);
 
-        return CardComment::where('card_id', $card->id)->with('user:id,name')->latest()->get();
+        return CardComment::where('card_id', $card->id)
+            ->with('user:id,name')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->simplePaginate(30);
     }
 
     public function store(Request $request, int $boardId, int $cardId)

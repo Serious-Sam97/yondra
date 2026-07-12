@@ -1,10 +1,13 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
-    public function up(): void {
+return new class extends Migration
+{
+    public function up(): void
+    {
         Schema::table('cards', function (Blueprint $table) {
             // CRM: monetary deal value (board currency).
             $table->decimal('value', 12, 2)->nullable()->after('priority');
@@ -15,7 +18,9 @@ return new class extends Migration {
             $table->foreignId('sprint_id')->nullable()->after('story_points')->constrained()->nullOnDelete();
         });
     }
-    public function down(): void {
+
+    public function down(): void
+    {
         Schema::table('cards', function (Blueprint $table) {
             $table->dropConstrainedForeignId('sprint_id');
             $table->dropColumn(['value', 'section_entered_at', 'story_points']);

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Events\BoardEvent;
+use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Card;
+use App\Infrastructure\Models\Section;
 use App\Infrastructure\Models\Sprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -15,6 +17,7 @@ class SprintController extends Controller
     public function index(int $boardId)
     {
         $this->authorizeBoard($boardId);
+
         return Sprint::where('board_id', $boardId)
             ->orderByRaw("CASE status WHEN 'active' THEN 0 WHEN 'future' THEN 1 ELSE 2 END")
             ->orderBy('start_date')
@@ -25,10 +28,10 @@ class SprintController extends Controller
     {
         $this->authorizeWrite($boardId);
         $validated = $request->validate([
-            'name'       => ['required', 'string', 'max:255'],
-            'goal'       => ['sometimes', 'nullable', 'string', 'max:500'],
+            'name' => ['required', 'string', 'max:255'],
+            'goal' => ['sometimes', 'nullable', 'string', 'max:500'],
             'start_date' => ['nullable', 'date'],
-            'end_date'   => ['nullable', 'date', 'after_or_equal:start_date'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
         ]);
 
         // Default the schedule: a sprint starts the day after the last one ends (never
@@ -49,7 +52,10 @@ class SprintController extends Controller
         // Keep the whole schedule non-overlapping (in case supplied dates collide).
         $shifted = $this->cascadeDates($boardId);
         broadcast(new BoardEvent($boardId, 'sprint.created', $sprint->fresh()->toArray()));
-        foreach ($shifted as $s) broadcast(new BoardEvent($boardId, 'sprint.updated', $s->toArray()));
+        foreach ($shifted as $s) {
+            broadcast(new BoardEvent($boardId, 'sprint.updated', $s->toArray()));
+        }
+
         return response()->json($sprint->fresh(), 201);
     }
 
@@ -58,10 +64,10 @@ class SprintController extends Controller
         $this->authorizeWrite($boardId);
         $sprint = Sprint::where('board_id', $boardId)->findOrFail($sprintId);
         $validated = $request->validate([
-            'name'       => ['sometimes', 'string', 'max:255'],
-            'goal'       => ['sometimes', 'nullable', 'string', 'max:500'],
+            'name' => ['sometimes', 'string', 'max:255'],
+            'goal' => ['sometimes', 'nullable', 'string', 'max:500'],
             'start_date' => ['sometimes', 'nullable', 'date'],
-            'end_date'   => ['sometimes', 'nullable', 'date', 'after_or_equal:start_date'],
+            'end_date' => ['sometimes', 'nullable', 'date', 'after_or_equal:start_date'],
         ]);
 
         $sprint->update($validated);
@@ -70,8 +76,11 @@ class SprintController extends Controller
         $shifted = $this->cascadeDates($boardId);
         broadcast(new BoardEvent($boardId, 'sprint.updated', $sprint->fresh()->toArray()));
         foreach ($shifted as $s) {
-            if ($s->id !== $sprint->id) broadcast(new BoardEvent($boardId, 'sprint.updated', $s->toArray()));
+            if ($s->id !== $sprint->id) {
+                broadcast(new BoardEvent($boardId, 'sprint.updated', $s->toArray()));
+            }
         }
+
         // Return the full ordered list so the caller reflects every cascade shift.
         return response()->json(
             Sprint::where('board_id', $boardId)
@@ -91,23 +100,24 @@ class SprintController extends Controller
         }
 
         $validated = $request->validate([
-            'goal'       => ['sometimes', 'nullable', 'string', 'max:500'],
+            'goal' => ['sometimes', 'nullable', 'string', 'max:500'],
             'start_date' => ['sometimes', 'nullable', 'date'],
-            'end_date'   => ['sometimes', 'nullable', 'date', 'after_or_equal:start_date'],
+            'end_date' => ['sometimes', 'nullable', 'date', 'after_or_equal:start_date'],
         ]);
 
         $cards = Card::where('sprint_id', $sprintId)->whereNull('archived_at')->get();
 
         $sprint->update(array_merge($validated, [
-            'status'           => 'active',
-            'is_active'        => true,
-            'started_at'       => now(),
-            'start_date'       => $validated['start_date'] ?? $sprint->start_date ?? now()->toDateString(),
+            'status' => 'active',
+            'is_active' => true,
+            'started_at' => now(),
+            'start_date' => $validated['start_date'] ?? $sprint->start_date ?? now()->toDateString(),
             'committed_points' => (int) $cards->sum('story_points'),
-            'committed_count'  => $cards->count(),
+            'committed_count' => $cards->count(),
         ]));
 
         broadcast(new BoardEvent($boardId, 'sprint.updated', $sprint->fresh()->toArray()));
+
         return response()->json($sprint->fresh());
     }
 
@@ -119,7 +129,7 @@ class SprintController extends Controller
 
         // move_to is 'backlog', 'new', or the (string) id of an existing future sprint.
         $validated = $request->validate([
-            'move_to'         => ['required', 'string'],
+            'move_to' => ['required', 'string'],
             'new_sprint_name' => ['required_if:move_to,new', 'string', 'max:255'],
         ]);
         $moveTo = $validated['move_to'];
@@ -136,7 +146,7 @@ class SprintController extends Controller
                     $c->save();
                 }
             }
-            $done = $cards->filter(fn($c) => $c->done_at !== null);
+            $done = $cards->filter(fn ($c) => $c->done_at !== null);
 
             // Resolve where the incomplete tickets land.
             $targetSprintId = null; // null → backlog
@@ -144,8 +154,8 @@ class SprintController extends Controller
             if ($moveTo === 'new') {
                 $newSprint = Sprint::create([
                     'board_id' => $boardId,
-                    'name'     => $validated['new_sprint_name'],
-                    'status'   => 'future',
+                    'name' => $validated['new_sprint_name'],
+                    'status' => 'future',
                 ]);
                 $targetSprintId = $newSprint->id;
             } elseif ($moveTo !== 'backlog') {
@@ -163,16 +173,16 @@ class SprintController extends Controller
             }
 
             $sprint->update([
-                'status'           => 'completed',
-                'is_active'        => false,
-                'completed_at'     => now(),
+                'status' => 'completed',
+                'is_active' => false,
+                'completed_at' => now(),
                 'completed_points' => (int) $done->sum('story_points'),
-                'completed_count'  => $done->count(),
-                'report_snapshot'  => $cards->map(fn($c) => [
-                    'id'            => $c->id,
-                    'name'          => $c->name,
-                    'points'        => $c->story_points,
-                    'done_at'       => optional($c->done_at)->toIso8601String(),
+                'completed_count' => $done->count(),
+                'report_snapshot' => $cards->map(fn ($c) => [
+                    'id' => $c->id,
+                    'name' => $c->name,
+                    'points' => $c->story_points,
+                    'done_at' => optional($c->done_at)->toIso8601String(),
                     'assigned_user' => $c->assignedUser ? ['id' => $c->assignedUser->id, 'name' => $c->assignedUser->name] : null,
                 ])->values()->all(),
             ]);
@@ -184,17 +194,24 @@ class SprintController extends Controller
         if ($newSprint) {
             broadcast(new BoardEvent($boardId, 'sprint.created', $newSprint->toArray()));
         }
-        // Nudge clients to re-read cards whose sprint assignment changed.
-        foreach ($movedIds as $cardId) {
-            $card = Card::with(['tags', 'assignedUser:id,name', 'createdBy:id,name'])->find($cardId);
-            if ($card) broadcast(new BoardEvent($boardId, 'card.updated', $card->toArray()));
+        // One batched nudge for every card whose sprint assignment changed — replaces a
+        // per-card re-query + blocking broadcast (N+1 queries + N Reverb pushes). Only
+        // sprint_id changed and every mover got the same target, so no re-query needed.
+        // Stale clients listening only for 'card.updated' won't converge until refreshed.
+        if (! empty($movedIds)) {
+            broadcast(new BoardEvent($boardId, 'cards.sprint_changed', [
+                'cards' => array_map(
+                    fn ($cardId) => ['id' => $cardId, 'sprint_id' => $targetSprintId],
+                    $movedIds,
+                ),
+            ]));
         }
 
         return response()->json([
-            'sprint'           => $sprint->fresh(),
-            'new_sprint'       => $newSprint,
+            'sprint' => $sprint->fresh(),
+            'new_sprint' => $newSprint,
             'target_sprint_id' => $targetSprintId,
-            'moved_ids'        => $movedIds,
+            'moved_ids' => $movedIds,
         ]);
     }
 
@@ -206,7 +223,7 @@ class SprintController extends Controller
 
         // Completed sprints report off the frozen snapshot; active/future off live cards.
         if ($sprint->status === 'completed' && is_array($sprint->report_snapshot)) {
-            $tickets = collect($sprint->report_snapshot)->map(fn($t) => [
+            $tickets = collect($sprint->report_snapshot)->map(fn ($t) => [
                 'id' => $t['id'], 'name' => $t['name'], 'points' => $t['points'] ?? null,
                 'done_at' => $t['done_at'] ?? null,
                 'assigned_user' => $t['assigned_user'] ?? null,
@@ -216,7 +233,7 @@ class SprintController extends Controller
             // column — so cards dragged to Done before done_at tracking still report correctly.
             $doneSectionIds = $this->doneSectionIds($boardId);
             $tickets = Card::where('sprint_id', $sprintId)->whereNull('archived_at')->with('assignedUser:id,name')->get()
-                ->map(fn($c) => [
+                ->map(fn ($c) => [
                     'id' => $c->id, 'name' => $c->name, 'points' => $c->story_points,
                     'done_at' => optional($c->done_at)->toIso8601String()
                         ?? (in_array($c->section_id, $doneSectionIds, true) ? now()->toIso8601String() : null),
@@ -224,22 +241,22 @@ class SprintController extends Controller
                 ]);
         }
 
-        $completed = $tickets->filter(fn($t) => !empty($t['done_at']))->values();
-        $notCompleted = $tickets->filter(fn($t) => empty($t['done_at']))->values();
+        $completed = $tickets->filter(fn ($t) => ! empty($t['done_at']))->values();
+        $notCompleted = $tickets->filter(fn ($t) => empty($t['done_at']))->values();
         $committedPoints = $sprint->committed_points ?? (int) $tickets->sum('points');
         $completedPoints = (int) $completed->sum('points');
 
         return response()->json([
-            'sprint'           => $sprint->makeVisible('report_snapshot')->only([
+            'sprint' => $sprint->makeVisible('report_snapshot')->only([
                 'id', 'name', 'status', 'goal', 'start_date', 'end_date',
                 'started_at', 'completed_at', 'committed_points', 'committed_count',
                 'completed_points', 'completed_count',
             ]),
             'committed_points' => $committedPoints,
             'completed_points' => $completedPoints,
-            'completed'        => $completed,
-            'not_completed'    => $notCompleted,
-            'burndown'         => $this->burndown($sprint, $tickets, $committedPoints),
+            'completed' => $completed,
+            'not_completed' => $notCompleted,
+            'burndown' => $this->burndown($sprint, $tickets, $committedPoints),
         ]);
     }
 
@@ -250,20 +267,23 @@ class SprintController extends Controller
             : ($sprint->start_date ? Carbon::parse($sprint->start_date)->startOfDay() : now()->startOfDay());
         $end = $sprint->completed_at ? $sprint->completed_at->copy()->startOfDay()
             : ($sprint->end_date ? Carbon::parse($sprint->end_date)->startOfDay() : now()->startOfDay());
-        if ($end->lt($start)) $end = $start->copy();
+        if ($end->lt($start)) {
+            $end = $start->copy();
+        }
 
         $days = $start->diffInDays($end) + 1;
         $series = [];
         for ($i = 0; $i < $days; $i++) {
             $day = $start->copy()->addDays($i)->endOfDay();
-            $burned = $tickets->filter(fn($t) => !empty($t['done_at']) && Carbon::parse($t['done_at'])->lte($day))
+            $burned = $tickets->filter(fn ($t) => ! empty($t['done_at']) && Carbon::parse($t['done_at'])->lte($day))
                 ->sum('points');
             $series[] = [
-                'date'      => $day->toDateString(),
+                'date' => $day->toDateString(),
                 'remaining' => max(0, $committedPoints - (int) $burned),
-                'ideal'     => round($committedPoints * (1 - ($days > 1 ? $i / ($days - 1) : 1)), 1),
+                'ideal' => round($committedPoints * (1 - ($days > 1 ? $i / ($days - 1) : 1)), 1),
             ];
         }
+
         return $series;
     }
 
@@ -283,25 +303,32 @@ class SprintController extends Controller
         $changed = [];
         for ($i = 1; $i < $sprints->count(); $i++) {
             $prev = $sprints[$i - 1];
-            $cur  = $sprints[$i];
+            $cur = $sprints[$i];
             // A sprint must begin the day AFTER the previous one ends (no shared boundary).
             if (Carbon::parse($cur->start_date)->lte(Carbon::parse($prev->end_date))) {
                 $duration = Carbon::parse($cur->start_date)->diffInDays(Carbon::parse($cur->end_date));
                 $newStart = Carbon::parse($prev->end_date)->addDay();
                 $cur->start_date = $newStart->toDateString();
-                $cur->end_date   = $newStart->copy()->addDays($duration)->toDateString();
+                $cur->end_date = $newStart->copy()->addDays($duration)->toDateString();
                 $cur->save();
                 $changed[] = $cur;
             }
         }
+
         return $changed;
     }
 
-    /** Ids of the board's "Done" columns (a card there counts as completed). */
+    /**
+     * Ids of the board's done columns (a card there counts as completed). Uses the
+     * board's configured done/won column via marksDone(), so CRM "Won" stages and
+     * renamed columns count — not just a column literally named "Done".
+     */
     private function doneSectionIds(int $boardId): array
     {
-        return \App\Infrastructure\Models\Section::where('board_id', $boardId)->get()
-            ->filter(fn($s) => strtolower((string) $s->name) === 'done')
+        $board = Board::findOrFail($boardId);
+
+        return Section::where('board_id', $boardId)->get()
+            ->filter(fn ($s) => $board->marksDone($s))
             ->pluck('id')->all();
     }
 
@@ -312,6 +339,7 @@ class SprintController extends Controller
         // Cards keep existing; their sprint_id is nulled by the FK's nullOnDelete.
         $sprint->delete();
         broadcast(new BoardEvent($boardId, 'sprint.deleted', ['id' => $sprintId]));
+
         return response()->json(null, 204);
     }
 }

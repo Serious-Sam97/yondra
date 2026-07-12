@@ -1,9 +1,12 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
-return new class extends Migration {
-    public function up(): void {
+return new class extends Migration
+{
+    public function up(): void
+    {
         // Turn Sentinel (QA) on for every existing board.
         DB::table('boards')->update(['qa_enabled' => true]);
 
@@ -15,7 +18,8 @@ return new class extends Migration {
         }
     }
 
-    public function down(): void {
+    public function down(): void
+    {
         if (DB::getDriverName() === 'pgsql') {
             DB::statement('ALTER TABLE boards ALTER COLUMN qa_enabled SET DEFAULT false');
         }

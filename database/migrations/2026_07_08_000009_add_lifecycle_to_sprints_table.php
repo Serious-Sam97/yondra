@@ -1,11 +1,14 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
-    public function up(): void {
+return new class extends Migration
+{
+    public function up(): void
+    {
         Schema::table('sprints', function (Blueprint $table) {
             // Lifecycle: a sprint moves future → active → completed.
             $table->string('status', 12)->default('future')->after('name');
@@ -26,7 +29,8 @@ return new class extends Migration {
         DB::table('sprints')->where('is_active', true)->update(['status' => 'active']);
     }
 
-    public function down(): void {
+    public function down(): void
+    {
         Schema::table('sprints', function (Blueprint $table) {
             $table->dropColumn([
                 'status', 'goal', 'started_at', 'completed_at',

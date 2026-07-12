@@ -50,8 +50,8 @@ class Notifier
     private function queueEmail(User $user, BaseYondraNotification $notification): void
     {
         $payload = $notification->toPayload();
-        $link    = $payload['deep_link'] ?? null;
-        $url     = $link ? rtrim((string) config('app.frontend_url'), '/') . $link : null;
+        $link = $payload['deep_link'] ?? null;
+        $url = $link ? rtrim((string) config('app.frontend_url'), '/').$link : null;
 
         Mail::to($user->email)->queue(new NotificationMail(
             subjectLine: $notification->mailSubject(),

@@ -38,12 +38,12 @@ Route::post('/broadcasting/auth', function (Request $request) {
     return Broadcast::auth($request);
 })->middleware('auth:sanctum');
 
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth');
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth');
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
-Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
-Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:auth');
+Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:auth');
 
 // Inbound GitHub webhooks — public, authenticated per-board via HMAC signature.
 Route::post('/webhooks/github/{boardId}', [GitHubWebhookController::class, 'handle']);
@@ -54,6 +54,16 @@ Route::post('/webhooks/whatsapp/{boardId}', [WhatsappWebhookController::class, '
 
 // Inbound Sentinel CI results — public, authenticated by the case's unguessable ci_token.
 Route::post('/webhooks/qa-ci/{token}', [QaController::class, 'ciHook']);
+
+// Private image streaming — signature-gated instead of Sanctum because the
+// frontend consumes these as plain <img src> URLs (no Bearer header possible).
+// `signed:relative` validates the path+query signature host-independently.
+Route::get('/card-images/{imageId}', [CardImageController::class, 'show'])
+    ->name('card-images.show')
+    ->middleware('signed:relative');
+Route::get('/inline-images', [ImageUploadController::class, 'show'])
+    ->name('inline-images.show')
+    ->middleware('signed:relative');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {

@@ -50,4 +50,3 @@ class BoardService
         return $this->boardRepository->duplicate($id, $name, $includeCards);
     }
 }
-

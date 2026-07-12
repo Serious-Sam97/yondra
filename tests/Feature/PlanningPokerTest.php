@@ -8,9 +8,10 @@ use App\Infrastructure\Models\User;
 
 function scrumCard(User $owner): array
 {
-    $board   = Board::create(['user_id' => $owner->id, 'name' => 'Scrum', 'description' => '', 'type' => 'scrum']);
+    $board = Board::create(['user_id' => $owner->id, 'name' => 'Scrum', 'description' => '', 'type' => 'scrum']);
     $section = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
-    $card    = Card::create(['board_id' => $board->id, 'section_id' => $section->id, 'name' => 'Story', 'description' => '']);
+    $card = Card::create(['board_id' => $board->id, 'section_id' => $section->id, 'name' => 'Story', 'description' => '']);
+
     return [$board, $card];
 }
 
@@ -86,7 +87,7 @@ it('applies the chosen estimate to the card story points', function () {
 
 it('tracks multiple participants and their votes', function () {
     $owner = User::factory()->create();
-    $mate  = User::factory()->create();
+    $mate = User::factory()->create();
     [$board, $card] = scrumCard($owner);
     // A read-only collaborator can still join and vote (participation is open to
     // anyone with board access).

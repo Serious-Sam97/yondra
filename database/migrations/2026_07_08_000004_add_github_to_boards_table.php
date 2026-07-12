@@ -1,10 +1,13 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
-    public function up(): void {
+return new class extends Migration
+{
+    public function up(): void
+    {
         Schema::table('boards', function (Blueprint $table) {
             // "owner/repo" this board's cards link into.
             $table->string('github_repo')->nullable()->after('default_permission');
@@ -14,7 +17,9 @@ return new class extends Migration {
             $table->string('github_webhook_secret')->nullable()->after('github_token');
         });
     }
-    public function down(): void {
+
+    public function down(): void
+    {
         Schema::table('boards', function (Blueprint $table) {
             $table->dropColumn(['github_repo', 'github_token', 'github_webhook_secret']);
         });

@@ -15,9 +15,9 @@ beforeEach(function () {
 
 function docCard(User $user): array
 {
-    $board   = Board::create(['user_id' => $user->id, 'name' => 'Board', 'description' => '']);
+    $board = Board::create(['user_id' => $user->id, 'name' => 'Board', 'description' => '']);
     $section = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
-    $card    = Card::create(['board_id' => $board->id, 'section_id' => $section->id, 'name' => 'Task', 'description' => '']);
+    $card = Card::create(['board_id' => $board->id, 'section_id' => $section->id, 'name' => 'Task', 'description' => '']);
 
     return [$board, $card];
 }
@@ -81,7 +81,7 @@ it('downloads a document through the auth-gated route', function () {
 });
 
 it('lets a read-only member download but not upload', function () {
-    $owner  = User::factory()->create();
+    $owner = User::factory()->create();
     $viewer = User::factory()->create();
     [$board, $card] = docCard($owner);
     BoardShare::create(['board_id' => $board->id, 'user_id' => $viewer->id, 'permission' => 'read']);

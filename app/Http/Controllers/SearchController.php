@@ -20,7 +20,7 @@ class SearchController extends Controller
             return ['boards' => [], 'cards' => []];
         }
 
-        $userId   = (int) Auth::id();
+        $userId = (int) Auth::id();
         $boardIds = Board::whereNull('archived_at')
             ->where(function ($w) use ($userId) {
                 $w->where('user_id', $userId)
@@ -39,10 +39,10 @@ class SearchController extends Controller
             ->limit(6)
             ->get(['id', 'name', 'project_id', 'type'])
             ->map(fn ($b) => [
-                'id'         => $b->id,
-                'name'       => $b->name,
+                'id' => $b->id,
+                'name' => $b->name,
                 'project_id' => $b->project_id,
-                'type'       => $b->type,
+                'type' => $b->type,
             ]);
 
         $numeric = ctype_digit($q) ? (int) $q : null;
@@ -60,24 +60,15 @@ class SearchController extends Controller
             ->limit(10)
             ->get()
             ->map(fn ($c) => [
-                'id'         => $c->id,
-                'name'       => $c->name,
-                'board_id'   => $c->board_id,
+                'id' => $c->id,
+                'name' => $c->name,
+                'board_id' => $c->board_id,
                 'board_name' => $c->board?->name,
-                'section'    => $c->section?->name,
-                'is_deal'    => $c->board?->type === 'crm',
-                'ticket_key' => $this->ticketKey($c->board?->ticket_prefix, $c->ticket_number),
+                'section' => $c->section?->name,
+                'is_deal' => $c->board?->type === 'crm',
+                'ticket_key' => Card::ticketKey($c->board?->ticket_prefix, $c->ticket_number),
             ]);
 
         return ['boards' => $boards, 'cards' => $cards];
-    }
-
-    private function ticketKey(?string $prefix, ?int $number): string
-    {
-        if ($number === null) {
-            return '';
-        }
-
-        return $prefix ? "{$prefix}-{$number}" : "#{$number}";
     }
 }

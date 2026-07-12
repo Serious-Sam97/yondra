@@ -1,10 +1,13 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
-    public function up(): void {
+return new class extends Migration
+{
+    public function up(): void
+    {
         Schema::create('board_activities', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('board_id');
@@ -15,5 +18,9 @@ return new class extends Migration {
             $table->foreign('board_id')->references('id')->on('boards')->onDelete('cascade');
         });
     }
-    public function down(): void { Schema::dropIfExists('board_activities'); }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('board_activities');
+    }
 };

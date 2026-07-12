@@ -16,26 +16,28 @@ class Sprint extends Model
     ];
 
     protected $casts = [
-        'start_date'       => 'date:Y-m-d',
-        'end_date'         => 'date:Y-m-d',
-        'is_active'        => 'boolean',
-        'started_at'       => 'datetime',
-        'completed_at'     => 'datetime',
+        'start_date' => 'date:Y-m-d',
+        'end_date' => 'date:Y-m-d',
+        'is_active' => 'boolean',
+        'started_at' => 'datetime',
+        'completed_at' => 'datetime',
         'committed_points' => 'integer',
-        'committed_count'  => 'integer',
+        'committed_count' => 'integer',
         'completed_points' => 'integer',
-        'completed_count'  => 'integer',
-        'report_snapshot'  => 'array',
+        'completed_count' => 'integer',
+        'report_snapshot' => 'array',
     ];
 
     // report_snapshot can be large; keep it out of the board payload (fetched via the report endpoint).
     protected $hidden = ['report_snapshot'];
 
-    public function board(): BelongsTo {
+    public function board(): BelongsTo
+    {
         return $this->belongsTo(Board::class);
     }
 
-    public function cards(): HasMany {
+    public function cards(): HasMany
+    {
         return $this->hasMany(Card::class);
     }
 }

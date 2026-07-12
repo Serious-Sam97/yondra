@@ -1,10 +1,13 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
-    public function up(): void {
+return new class extends Migration
+{
+    public function up(): void
+    {
         Schema::table('boards', function (Blueprint $table) {
             // Which WhatsApp integration this board speaks: 'meta' (direct Cloud API)
             // or 'bsp' (a Business Solution Provider). Null => fall back to config default.
@@ -21,7 +24,8 @@ return new class extends Migration {
         });
     }
 
-    public function down(): void {
+    public function down(): void
+    {
         Schema::table('boards', function (Blueprint $table) {
             $table->dropColumn([
                 'whatsapp_provider', 'whatsapp_phone_number_id', 'whatsapp_waba_id',

@@ -9,8 +9,9 @@ use App\Infrastructure\Models\User;
 function scrumBoard(User $user): array
 {
     $board = Board::create(['user_id' => $user->id, 'name' => 'Scrum', 'description' => '', 'type' => 'scrum']);
-    $todo  = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
-    $done  = Section::create(['board_id' => $board->id, 'name' => 'Done']);
+    $todo = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
+    $done = Section::create(['board_id' => $board->id, 'name' => 'Done']);
+
     return [$board, $todo, $done];
 }
 
@@ -161,4 +162,26 @@ it('cascades a later sprint forward when an earlier sprint end date overlaps it'
     // S2 pushed to start the day after S1's new end, keeping its 13-day duration.
     expect($s2->start_date->toDateString())->toBe('2026-08-21')
         ->and($s2->end_date->toDateString())->toBe('2026-09-03');
+});
+
+it('completes a sprint using the configured done column, not just a "Done"-named one', function () {
+    $user = User::factory()->create();
+    $board = Board::create(['user_id' => $user->id, 'name' => 'CRM', 'description' => '', 'type' => 'scrum']);
+    $todo = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
+    $won = Section::create(['board_id' => $board->id, 'name' => 'Won']);
+    $board->update(['done_section_id' => $won->id]);
+
+    $sprint = Sprint::create(['board_id' => $board->id, 'name' => 'S1', 'status' => 'active', 'is_active' => true]);
+    // Sitting in the configured done column but never stamped — completion must backfill it.
+    $wonCard = Card::create(['board_id' => $board->id, 'section_id' => $won->id, 'name' => 'Won card', 'description' => '', 'sprint_id' => $sprint->id, 'story_points' => 5]);
+    $openCard = Card::create(['board_id' => $board->id, 'section_id' => $todo->id, 'name' => 'Open card', 'description' => '', 'sprint_id' => $sprint->id, 'story_points' => 8]);
+
+    $this->actingAs($user)
+        ->postJson("/api/boards/{$board->id}/sprints/{$sprint->id}/complete", ['move_to' => 'backlog'])
+        ->assertOk()
+        ->assertJsonFragment(['status' => 'completed', 'completed_points' => 5, 'completed_count' => 1]);
+
+    expect(Card::find($wonCard->id)->done_at)->not->toBeNull()
+        ->and(Card::find($wonCard->id)->sprint_id)->toBe($sprint->id)
+        ->and(Card::find($openCard->id)->sprint_id)->toBeNull();
 });

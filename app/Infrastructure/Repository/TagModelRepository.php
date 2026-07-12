@@ -18,8 +18,8 @@ class TagModelRepository implements TagRepository
     {
         return Tag::create([
             'board_id' => $data['board_id'],
-            'name'     => $data['name'],
-            'color'    => $data['color'],
+            'name' => $data['name'],
+            'color' => $data['color'],
         ]);
     }
 
@@ -27,6 +27,7 @@ class TagModelRepository implements TagRepository
     {
         $tag = Tag::where('board_id', $boardId)->findOrFail($id);
         $tag->update(array_intersect_key($data, array_flip(['name', 'color'])));
+
         return $tag->fresh();
     }
 

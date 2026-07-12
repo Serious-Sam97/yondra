@@ -20,7 +20,7 @@ class BoardEvent implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [new PrivateChannel('board.' . $this->boardId)];
+        return [new PrivateChannel('board.'.$this->boardId)];
     }
 
     public function broadcastAs(): string

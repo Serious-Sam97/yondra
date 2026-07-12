@@ -6,28 +6,25 @@ use App\Events\BoardEvent;
 use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\CardLink;
-use App\Infrastructure\Repository\CardModelRepository;
 use App\Services\GitHubService;
 use Illuminate\Http\Request;
 
 class GitHubWebhookController extends Controller
 {
-    public function __construct(private GitHubService $github)
-    {
-    }
+    public function __construct(private GitHubService $github) {}
 
     public function handle(Request $request, int $boardId)
     {
         $board = Board::find($boardId);
-        if (!$board || !$board->github_webhook_secret) {
+        if (! $board || ! $board->github_webhook_secret) {
             return response()->json(['message' => 'Webhook not configured for this board.'], 404);
         }
 
-        if (!$this->signatureValid($request, $board->github_webhook_secret)) {
+        if (! $this->signatureValid($request, $board->github_webhook_secret)) {
             return response()->json(['message' => 'Invalid signature.'], 401);
         }
 
-        $event   = $request->header('X-GitHub-Event');
+        $event = $request->header('X-GitHub-Event');
         $payload = $request->json()->all();
 
         if ($event === 'ping') {
@@ -36,9 +33,9 @@ class GitHubWebhookController extends Controller
 
         $affectedCardIds = match ($event) {
             'pull_request' => $this->applyResourceEvent($board, 'pr', data_get($payload, 'pull_request'), $payload),
-            'issues'       => $this->applyResourceEvent($board, 'issue', data_get($payload, 'issue'), $payload),
-            'check_suite'  => $this->applyCheckSuite($board, $payload),
-            default        => [],
+            'issues' => $this->applyResourceEvent($board, 'issue', data_get($payload, 'issue'), $payload),
+            'check_suite' => $this->applyCheckSuite($board, $payload),
+            default => [],
         };
 
         foreach (array_unique($affectedCardIds) as $cardId) {
@@ -51,13 +48,13 @@ class GitHubWebhookController extends Controller
     /** @return int[] card ids whose links were updated */
     private function applyResourceEvent(Board $board, string $type, ?array $resource, array $payload): array
     {
-        if (!$resource) {
+        if (! $resource) {
             return [];
         }
 
         [$owner, $repo] = $this->repoParts($payload);
         $number = data_get($resource, 'number');
-        if (!$number) {
+        if (! $number) {
             return [];
         }
 
@@ -87,7 +84,7 @@ class GitHubWebhookController extends Controller
         $checks = match ($conclusion) {
             'success' => 'success',
             'failure', 'timed_out', 'cancelled', 'action_required' => 'failure',
-            default   => 'pending',
+            default => 'pending',
         };
 
         $cardIds = [];
@@ -112,6 +109,7 @@ class GitHubWebhookController extends Controller
         if (str_contains($full, '/')) {
             return explode('/', $full, 2);
         }
+
         return [data_get($payload, 'repository.owner.login'), data_get($payload, 'repository.name')];
     }
 
@@ -121,17 +119,18 @@ class GitHubWebhookController extends Controller
         if ($header === '') {
             return false;
         }
-        $expected = 'sha256=' . hash_hmac('sha256', $request->getContent(), $secret);
+        $expected = 'sha256='.hash_hmac('sha256', $request->getContent(), $secret);
+
         return hash_equals($expected, $header);
     }
 
     private function broadcastCard(Board $board, int $cardId): void
     {
         $card = Card::with(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links', 'documents'])->find($cardId);
-        if (!$card) {
+        if (! $card) {
             return;
         }
-        $card->ticket_key = CardModelRepository::composeTicketKey($board->ticket_prefix, $card->ticket_number);
+        $card->ticket_key = Card::ticketKey($board->ticket_prefix, $card->ticket_number);
         broadcast(new BoardEvent($board->id, 'card.updated', $card->toArray()));
     }
 }

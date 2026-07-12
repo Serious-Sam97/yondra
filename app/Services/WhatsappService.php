@@ -11,7 +11,6 @@ use App\Infrastructure\Models\Section;
 use App\Infrastructure\Models\WhatsappConversation;
 use App\Infrastructure\Models\WhatsappMessage;
 use App\Infrastructure\Models\WhatsappStageAutomation;
-use App\Infrastructure\Repository\CardModelRepository;
 use App\Services\Whatsapp\BspDriver;
 use App\Services\Whatsapp\MetaCloudDriver;
 use App\Services\Whatsapp\SendResult;
@@ -337,7 +336,7 @@ class WhatsappService
                 'section_entered_at' => now(),
             ]);
 
-            $card->ticket_key = CardModelRepository::composeTicketKey($locked->ticket_prefix, $ticket);
+            $card->ticket_key = Card::ticketKey($locked->ticket_prefix, $ticket);
 
             return $card->load(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links', 'documents'])->toArray();
         });

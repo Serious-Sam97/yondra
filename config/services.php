@@ -38,7 +38,7 @@ return [
     'github' => [
         'api_url' => env('GITHUB_API_URL', 'https://api.github.com'),
         // Optional instance-wide fallback used when a board has no token of its own.
-        'token'   => env('GITHUB_TOKEN'),
+        'token' => env('GITHUB_TOKEN'),
     ],
 
     'whatsapp' => [
@@ -54,19 +54,19 @@ return [
         // Direct Meta Cloud API (graph.facebook.com).
         'meta' => [
             'base_url' => env('WHATSAPP_META_BASE_URL', 'https://graph.facebook.com'),
-            'version'  => env('WHATSAPP_META_VERSION', 'v21.0'),
+            'version' => env('WHATSAPP_META_VERSION', 'v21.0'),
             // Instance-wide fallbacks; a board overrides each via its own DB columns.
             'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
-            'token'           => env('WHATSAPP_TOKEN'),
-            'app_secret'      => env('WHATSAPP_APP_SECRET'),
-            'verify_token'    => env('WHATSAPP_VERIFY_TOKEN'),
+            'token' => env('WHATSAPP_TOKEN'),
+            'app_secret' => env('WHATSAPP_APP_SECRET'),
+            'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
         ],
 
         // Business Solution Provider (e.g. 360dialog waba-v2, Twilio). Same Cloud-API
         // message payloads; only the transport + auth header differ.
         'bsp' => [
             'base_url' => env('WHATSAPP_BSP_BASE_URL', 'https://waba-v2.360dialog.io'),
-            'api_key'  => env('WHATSAPP_BSP_API_KEY'),
+            'api_key' => env('WHATSAPP_BSP_API_KEY'),
         ],
     ],
 

@@ -1,12 +1,15 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
 // Data migration: give every existing top-level card a fresh per-board ticket
 // number (1..N by creation order) and set each board's next_ticket_number.
 // Subtasks (parent_card_id set) are left null.
-return new class extends Migration {
-    public function up(): void {
+return new class extends Migration
+{
+    public function up(): void
+    {
         $boardIds = DB::table('boards')->pluck('id');
 
         foreach ($boardIds as $boardId) {
@@ -27,7 +30,8 @@ return new class extends Migration {
         }
     }
 
-    public function down(): void {
+    public function down(): void
+    {
         DB::table('cards')->update(['ticket_number' => null]);
         DB::table('boards')->update(['next_ticket_number' => 1]);
     }

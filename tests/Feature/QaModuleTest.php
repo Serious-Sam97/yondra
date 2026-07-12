@@ -112,6 +112,29 @@ it('quality gate blocks a move to Done with failing or not-run tests', function 
     expect(Card::find($card->id)->section_id)->toBe($done->id);
 });
 
+it('quality gate also blocks the card-update path into Done, not just reorder', function () {
+    $owner = User::factory()->create();
+    $board = Board::create(['user_id' => $owner->id, 'name' => 'B', 'description' => '', 'type' => 'kanban', 'qa_enabled' => true]);
+    $todo = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
+    $done = Section::create(['board_id' => $board->id, 'name' => 'Done']);
+    $card = Card::create(['board_id' => $board->id, 'section_id' => $todo->id, 'name' => 'Feature', 'description' => '']);
+    $case = QaCase::create(['board_id' => $board->id, 'card_id' => $card->id, 'title' => 'T']);
+    TestRun::create(['test_case_id' => $case->id, 'board_id' => $board->id, 'status' => 'failed', 'executed_at' => now()]);
+
+    $update = "/api/boards/{$board->id}/cards/{$card->id}";
+
+    // Failing test → a plain update with section_id may not sneak into Done.
+    $this->actingAs($owner)->putJson($update, ['section_id' => $done->id])->assertStatus(422);
+    $fresh = Card::find($card->id);
+    expect($fresh->section_id)->toBe($todo->id)
+        ->and($fresh->done_at)->toBeNull();
+
+    // A newer passing run opens the gate on this path too.
+    TestRun::create(['test_case_id' => $case->id, 'board_id' => $board->id, 'status' => 'passed', 'executed_at' => now()->addMinute()]);
+    $this->actingAs($owner)->putJson($update, ['section_id' => $done->id])->assertOk();
+    expect(Card::find($card->id)->section_id)->toBe($done->id);
+});
+
 it('couples a bug: resolving it flips the case to awaiting-retest, a new run clears it', function () {
     $owner = User::factory()->create();
     $board = Board::create(['user_id' => $owner->id, 'name' => 'B', 'description' => '', 'type' => 'kanban', 'qa_enabled' => true]);

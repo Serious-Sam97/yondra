@@ -13,19 +13,22 @@ class PlanningSession extends Model
     ];
 
     protected $casts = [
-        'round'    => 'integer',
+        'round' => 'integer',
         'revealed' => 'boolean',
     ];
 
-    public function board(): BelongsTo {
+    public function board(): BelongsTo
+    {
         return $this->belongsTo(Board::class);
     }
 
-    public function card(): BelongsTo {
+    public function card(): BelongsTo
+    {
         return $this->belongsTo(Card::class);
     }
 
-    public function votes(): HasMany {
+    public function votes(): HasMany
+    {
         return $this->hasMany(PlanningVote::class);
     }
 }

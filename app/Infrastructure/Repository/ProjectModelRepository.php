@@ -24,15 +24,15 @@ class ProjectModelRepository implements ProjectRepository
             'owner:id,name',
             'members:id,name,email',
             // Archived boards are hidden from the lists; count excludes them too.
-            'boards' => fn($q) => $q->whereNull('archived_at')->with(['owner:id,name', 'sharedWith:id,name']),
+            'boards' => fn ($q) => $q->whereNull('archived_at')->with(['owner:id,name', 'sharedWith:id,name']),
         ];
-        $boardsCount = ['boards as boards_count' => fn($q) => $q->whereNull('archived_at')];
+        $boardsCount = ['boards as boards_count' => fn ($q) => $q->whereNull('archived_at')];
 
         // "Owned" = you are the primary owner OR carry the 'owner' pivot role (co-owner).
         $owned = Project::whereNull('archived_at')
-            ->where(fn($q) => $q
+            ->where(fn ($q) => $q
                 ->where('owner_id', $userId)
-                ->orWhereHas('members', fn($m) => $m->where('users.id', $userId)->where('role', 'owner')))
+                ->orWhereHas('members', fn ($m) => $m->where('users.id', $userId)->where('role', 'owner')))
             ->with($eagerLoad)
             ->withCount($boardsCount)
             ->get();
@@ -41,19 +41,19 @@ class ProjectModelRepository implements ProjectRepository
 
         $member = Project::whereNull('archived_at')
             ->whereNotIn('id', $ownedIds)
-            ->whereHas('members', fn($q) => $q->where('users.id', $userId))
+            ->whereHas('members', fn ($q) => $q->where('users.id', $userId))
             ->with($eagerLoad)
             ->withCount($boardsCount)
             ->get();
 
-        $flattenSharedWith = fn($projects) => $projects->each(function ($p) {
-            $p->boards->each(fn($b) => $b->sharedWith->each(fn($u) => $u->permission = $u->pivot->permission ?? 'write'));
-            $p->members->each(fn($u) => $u->role = $u->pivot->role);
+        $flattenSharedWith = fn ($projects) => $projects->each(function ($p) {
+            $p->boards->each(fn ($b) => $b->sharedWith->each(fn ($u) => $u->permission = $u->pivot->permission ?? 'write'));
+            $p->members->each(fn ($u) => $u->role = $u->pivot->role);
         });
 
         // Project owners see every board; non-owner members only see boards
         // they own or are shared onto.
-        $member->each(fn($p) => $this->restrictBoardsForMember($p, $userId));
+        $member->each(fn ($p) => $this->restrictBoardsForMember($p, $userId));
 
         $flattenSharedWith($owned);
         $flattenSharedWith($member);
@@ -72,16 +72,16 @@ class ProjectModelRepository implements ProjectRepository
         $project = Project::with([
             'owner:id,name,email',
             'members:id,name,email',
-            'boards' => fn($q) => $q->whereNull('archived_at')->with(['owner:id,name', 'sharedWith:id,name']),
+            'boards' => fn ($q) => $q->whereNull('archived_at')->with(['owner:id,name', 'sharedWith:id,name']),
         ])->findOrFail($id);
 
         $this->authorizeAccess($project);
 
-        $project->members->each(fn($u) => $u->role = $u->pivot->role);
+        $project->members->each(fn ($u) => $u->role = $u->pivot->role);
 
         // Non-owner members only see boards they own or are shared onto.
         $isOwner = $project->isOwnedBy($userId);
-        if (!$isOwner) {
+        if (! $isOwner) {
             $this->restrictBoardsForMember($project, $userId);
         }
 
@@ -89,16 +89,16 @@ class ProjectModelRepository implements ProjectRepository
         // boards actually returned so clients don't read a stale/absent count.
         $project->boards_count = $project->boards->count();
 
-        $project->boards->each(fn($b) => $b->sharedWith->each(fn($u) => $u->permission = $u->pivot->permission ?? 'write'));
+        $project->boards->each(fn ($b) => $b->sharedWith->each(fn ($u) => $u->permission = $u->pivot->permission ?? 'write'));
 
         // Archived boards live in a separate list the client toggles into view.
         $archived = Board::where('project_id', $id)->whereNotNull('archived_at')
             ->with(['owner:id,name', 'sharedWith:id,name'])
             ->orderByDesc('archived_at')
             ->get();
-        if (!$isOwner) {
-            $archived = $archived->filter(fn($b) => $b->user_id === $userId
-                || $b->sharedWith->contains(fn($u) => $u->id === $userId))->values();
+        if (! $isOwner) {
+            $archived = $archived->filter(fn ($b) => $b->user_id === $userId
+                || $b->sharedWith->contains(fn ($u) => $u->id === $userId))->values();
         }
         $project->archived_boards = $archived;
 
@@ -124,12 +124,12 @@ class ProjectModelRepository implements ProjectRepository
             return;
         }
 
-        $scoped = fn() => Card::whereIn('board_id', $ids)
+        $scoped = fn () => Card::whereIn('board_id', $ids)
             ->whereNull('archived_at')
             ->whereNull('parent_card_id');
 
         $total = $scoped()->selectRaw('board_id, count(*) as c')->groupBy('board_id')->pluck('c', 'board_id');
-        $done  = $scoped()->whereNotNull('done_at')->selectRaw('board_id, count(*) as c')->groupBy('board_id')->pluck('c', 'board_id');
+        $done = $scoped()->whereNotNull('done_at')->selectRaw('board_id, count(*) as c')->groupBy('board_id')->pluck('c', 'board_id');
 
         // "To Do" = the first ordered non-Backlog column of each board.
         $firstSectionIds = [];
@@ -149,7 +149,7 @@ class ProjectModelRepository implements ProjectRepository
             $d = (int) ($done[$b->id] ?? 0);
             $td = (int) ($todo[$b->id] ?? 0);
             $b->cards_count = $t;
-            $b->done_count  = $d;
+            $b->done_count = $d;
             $b->flow = ['todo' => $td, 'doing' => max(0, $t - $d - $td), 'done' => $d];
         }
     }
@@ -162,7 +162,7 @@ class ProjectModelRepository implements ProjectRepository
     private function restrictBoardsForMember(Project $project, int $userId): void
     {
         $accessible = $project->boards
-            ->filter(fn($b) => $b->user_id === $userId || $b->sharedWith->contains(fn($u) => $u->id === $userId))
+            ->filter(fn ($b) => $b->user_id === $userId || $b->sharedWith->contains(fn ($u) => $u->id === $userId))
             ->values();
 
         $project->setRelation('boards', $accessible);
@@ -174,16 +174,17 @@ class ProjectModelRepository implements ProjectRepository
         $userId = Auth::id();
 
         $project = Project::create([
-            'owner_id'    => $userId,
-            'name'        => $request['name'],
+            'owner_id' => $userId,
+            'name' => $request['name'],
             'description' => $request['description'] ?? null,
-            'color'       => $request['color'] ?? '#1976D2',
+            'color' => $request['color'] ?? '#1976D2',
         ]);
 
         $project->members()->attach($userId, ['role' => 'owner']);
 
         $project->load(['owner:id,name', 'members:id,name,email'])->loadCount('boards');
         $project->setAttribute('boards', collect());
+
         return $project;
     }
 
@@ -193,16 +194,16 @@ class ProjectModelRepository implements ProjectRepository
         $this->authorizeOwner($project);
 
         $project->update([
-            'name'               => $request['name'] ?? $project->name,
-            'description'        => array_key_exists('description', $request) ? $request['description'] : $project->description,
-            'color'              => $request['color'] ?? $project->color,
+            'name' => $request['name'] ?? $project->name,
+            'description' => array_key_exists('description', $request) ? $request['description'] : $project->description,
+            'color' => $request['color'] ?? $project->color,
             'default_permission' => $request['default_permission'] ?? $project->default_permission,
         ]);
 
         return $project->fresh()->load([
             'owner:id,name',
             'members:id,name,email',
-            'boards' => fn($q) => $q->withCount('cards')->with(['owner:id,name', 'sharedWith:id,name']),
+            'boards' => fn ($q) => $q->withCount('cards')->with(['owner:id,name', 'sharedWith:id,name']),
         ])->loadCount('boards');
     }
 
@@ -257,6 +258,7 @@ class ProjectModelRepository implements ProjectRepository
         $project = Project::findOrFail($id);
         $this->authorizeOwner($project);
         $project->update(['archived_at' => $archived ? now() : null]);
+
         return $this->show($id);
     }
 
@@ -267,10 +269,10 @@ class ProjectModelRepository implements ProjectRepository
         $userId = Auth::id();
 
         $copy = Project::create([
-            'owner_id'           => $userId,
-            'name'               => $name ?: ($source->name . ' (copy)'),
-            'description'        => $source->description,
-            'color'             => $source->color,
+            'owner_id' => $userId,
+            'name' => $name ?: ($source->name.' (copy)'),
+            'description' => $source->description,
+            'color' => $source->color,
             'default_permission' => $source->default_permission,
         ]);
         $copy->members()->attach($userId, ['role' => 'owner']);
@@ -293,12 +295,12 @@ class ProjectModelRepository implements ProjectRepository
         $board->load(['sections', 'tags']);
 
         $copy = Board::create([
-            'user_id'            => $userId,
-            'project_id'         => $projectId,
-            'name'               => $board->name,
-            'description'        => $board->description,
-            'ticket_prefix'      => $board->ticket_prefix,
-            'background'         => $board->background,
+            'user_id' => $userId,
+            'project_id' => $projectId,
+            'name' => $board->name,
+            'description' => $board->description,
+            'ticket_prefix' => $board->ticket_prefix,
+            'background' => $board->background,
             'default_permission' => $board->default_permission,
         ]);
 
@@ -324,12 +326,14 @@ class ProjectModelRepository implements ProjectRepository
             $ticket = 1;
             foreach ($cards as $card) {
                 $clone = $card->replicate(['ticket_number', 'archived_at', 'done_at']);
-                $clone->board_id      = $copy->id;
-                $clone->section_id    = $sectionMap[$card->section_id] ?? $copy->sections()->min('id');
+                $clone->board_id = $copy->id;
+                $clone->section_id = $sectionMap[$card->section_id] ?? $copy->sections()->min('id');
                 $clone->ticket_number = $ticket++;
                 $clone->save();
-                $newTagIds = $card->tags->pluck('id')->map(fn($tid) => $tagMap[$tid] ?? null)->filter()->all();
-                if ($newTagIds) $clone->tags()->sync($newTagIds);
+                $newTagIds = $card->tags->pluck('id')->map(fn ($tid) => $tagMap[$tid] ?? null)->filter()->all();
+                if ($newTagIds) {
+                    $clone->tags()->sync($newTagIds);
+                }
             }
             $copy->update(['next_ticket_number' => $ticket]);
         }
@@ -343,7 +347,7 @@ class ProjectModelRepository implements ProjectRepository
         $memberIds = $project->members()->pluck('users.id')->push($project->owner_id)->unique();
 
         return User::whereNotIn('id', $memberIds)
-            ->when($q, fn($query) => $query->where(fn($w) => $w
+            ->when($q, fn ($query) => $query->where(fn ($w) => $w
                 ->where('name', 'like', "%{$q}%")
                 ->orWhere('email', 'like', "%{$q}%")))
             ->orderBy('name')
@@ -353,15 +357,15 @@ class ProjectModelRepository implements ProjectRepository
 
     private function authorizeAccess(Project $project): void
     {
-        if (!$project->isAccessibleBy(Auth::id())) {
-            throw new AccessDeniedHttpException();
+        if (! $project->isAccessibleBy(Auth::id())) {
+            throw new AccessDeniedHttpException;
         }
     }
 
     private function authorizeOwner(Project $project): void
     {
-        if (!$project->isOwnedBy(Auth::id())) {
-            throw new AccessDeniedHttpException();
+        if (! $project->isOwnedBy(Auth::id())) {
+            throw new AccessDeniedHttpException;
         }
     }
 }

@@ -88,6 +88,8 @@ class AuthController extends Controller
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function (User $user, string $password) {
                 $user->forceFill(['password' => Hash::make($password)])->save();
+                // A reset is the recovery path after a compromise — revoke every token.
+                $user->tokens()->delete();
                 event(new PasswordReset($user));
             }
         );
@@ -132,6 +134,13 @@ class AuthController extends Controller
         ]);
 
         $user->update(['password' => Hash::make($request->password)]);
+
+        // Revoke every other token so a password change ends any hijacked session;
+        // only the session performing the change stays valid.
+        $currentTokenId = $user->currentAccessToken()?->id;
+        $user->tokens()
+            ->when($currentTokenId, fn ($query) => $query->whereKeyNot($currentTokenId))
+            ->delete();
 
         return response()->json(['message' => 'Password updated successfully']);
     }

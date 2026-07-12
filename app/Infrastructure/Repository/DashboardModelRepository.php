@@ -24,7 +24,7 @@ class DashboardModelRepository
     public function index(): array
     {
         $userId = (int) Auth::id();
-        $today  = Carbon::today();
+        $today = Carbon::today();
 
         // Every board the user can see: owns it, is shared onto it, or owns the
         // parent project. Mirrors Board::isAccessibleBy()'s three branches.
@@ -41,14 +41,15 @@ class DashboardModelRepository
         $crm = $this->crm($boardIds);
 
         return [
-            'vitals'     => $this->vitals($boardIds, $userId, $today, (float) ($crm['open_total'] ?? 0)),
-            'queue'      => $this->queue($boardIds, $userId, $today),
+            'vitals' => $this->vitals($boardIds, $userId, $today, (float) ($crm['open_total'] ?? 0)),
+            'queue' => $this->queue($boardIds, $userId, $today),
             'throughput' => $this->throughput($boardIds, $today),
-            'sprint'     => $this->activeSprint($boardIds, $today),
-            'crm'        => $crm,
-            'prs'        => $this->pullRequests($boardIds),
-            'activity'   => $this->activity($boardIds),
-            'projects'   => resolve(ProjectService::class)->fetchAll(),
+            'sprint' => $this->activeSprint($boardIds, $today),
+            'crm' => $crm,
+            'prs' => $this->pullRequests($boardIds),
+            'activity' => $this->activity($boardIds),
+            'projects' => resolve(ProjectService::class)->fetchAll(),
+            'projects_meta' => $this->projectsMeta($boardIds),
         ];
     }
 
@@ -73,12 +74,36 @@ class DashboardModelRepository
             ->where('done_at', '>=', $today->copy()->subDays(7))
             ->count();
 
+        // Prior 7-day window (14d ago -> 7d ago) so the UI can show an honest
+        // week-over-week delta for completions.
+        $donePrev7d = Card::whereIn('board_id', $boardIds)
+            ->where('assigned_user_id', $userId)
+            ->whereNotNull('done_at')
+            ->where('done_at', '>=', $today->copy()->subDays(14))
+            ->where('done_at', '<', $today->copy()->subDays(7))
+            ->count();
+
+        $overdueCards = $open->filter(fn ($c) => $c->due_date && $c->due_date->lt($today));
+        $dueWeek = $open->filter(fn ($c) => $c->due_date
+            && $c->due_date->gte($today)
+            && $c->due_date->lte($today->copy()->addDays(7)));
+
         return [
-            'overdue'     => $open->filter(fn ($c) => $c->due_date && $c->due_date->lt($today))->count(),
-            'due_today'   => $open->filter(fn ($c) => $c->due_date && $c->due_date->isSameDay($today))->count(),
+            'overdue' => $overdueCards->count(),
+            // How stale the worst overdue card is — factual sub-line for the tile.
+            'overdue_oldest_days' => $overdueCards->isNotEmpty()
+                ? (int) $overdueCards->map(fn ($c) => $c->due_date->startOfDay()->diffInDays($today))->max()
+                : null,
+            'due_today' => $open->filter(fn ($c) => $c->due_date && $c->due_date->isSameDay($today))->count(),
+            'due_week' => $dueWeek->count(),
+            'next_due' => $dueWeek->isNotEmpty()
+                ? $dueWeek->sortBy(fn ($c) => $c->due_date->timestamp)->first()->due_date->toDateString()
+                : null,
             'in_progress' => $open->count(),
-            'done_7d'     => $done7d,
-            'pipeline'    => round($pipeline, 2),
+            'in_progress_boards' => $open->pluck('board_id')->unique()->count(),
+            'done_7d' => $done7d,
+            'done_prev_7d' => $donePrev7d,
+            'pipeline' => round($pipeline, 2),
         ];
     }
 
@@ -100,15 +125,15 @@ class DashboardModelRepository
 
         return [
             'overdue' => $overdue->map(fn ($c) => $this->mapCard($c))->values(),
-            'today'   => $dueToday->map(fn ($c) => $this->mapCard($c))->values(),
-            'high'    => $high->map(fn ($c) => $this->mapCard($c))->values(),
+            'today' => $dueToday->map(fn ($c) => $this->mapCard($c))->values(),
+            'high' => $high->map(fn ($c) => $this->mapCard($c))->values(),
         ];
     }
 
     /** Completed cards per day across the last 14 days (oldest -> newest). */
     private function throughput(Collection $boardIds, Carbon $today): array
     {
-        $start   = $today->copy()->subDays(13);
+        $start = $today->copy()->subDays(13);
         $buckets = array_fill(0, 14, 0);
 
         Card::whereIn('board_id', $boardIds)
@@ -130,6 +155,7 @@ class DashboardModelRepository
     {
         $sprint = Sprint::whereIn('board_id', $boardIds)
             ->where('is_active', true)
+            ->with('board:id,name')
             ->orderByDesc('start_date')
             ->orderByDesc('started_at')
             ->first();
@@ -148,14 +174,15 @@ class DashboardModelRepository
             : null;
 
         return [
-            'name'          => $sprint->name,
-            'goal'          => $sprint->goal,
-            'committed'     => $committed,
-            'completed'     => $completed,
-            'remaining'     => max(0, $committed - $completed),
-            'days_total'    => $daysTotal,
-            'days_left'     => $daysLeft,
-            'days_elapsed'  => $daysTotal !== null && $daysLeft !== null ? max(0, $daysTotal - $daysLeft) : null,
+            'name' => $sprint->name,
+            'board_name' => $sprint->board?->name,
+            'goal' => $sprint->goal,
+            'committed' => $committed,
+            'completed' => $completed,
+            'remaining' => max(0, $committed - $completed),
+            'days_total' => $daysTotal,
+            'days_left' => $daysLeft,
+            'days_elapsed' => $daysTotal !== null && $daysLeft !== null ? max(0, $daysTotal - $daysLeft) : null,
         ];
     }
 
@@ -209,21 +236,34 @@ class DashboardModelRepository
             ->sortBy(fn ($c) => $c->section_entered_at->timestamp)
             ->take(6)
             ->map(fn ($c) => [
-                'id'        => $c->id,
-                'board_id'  => $c->board_id,
-                'name'      => $c->name,
-                'stage'     => $sectionMeta[$c->section_id]['name'] ?? null,
-                'value'     => $c->value !== null ? (float) $c->value : null,
+                'id' => $c->id,
+                'board_id' => $c->board_id,
+                'name' => $c->name,
+                'stage' => $sectionMeta[$c->section_id]['name'] ?? null,
+                'value' => $c->value !== null ? (float) $c->value : null,
                 'days_idle' => (int) $c->section_entered_at->startOfDay()->diffInDays(Carbon::today()),
             ])
             ->values();
 
+        // Biggest open deal — lets the UI name the whale when one deal dominates.
+        $topDeal = $open->filter(fn ($c) => $c->value !== null)
+            ->sortByDesc(fn ($c) => (float) $c->value)
+            ->first();
+
         return [
-            'currency'   => $boards->first()->currency ?? 'USD',
+            'currency' => $boards->first()->currency ?? 'USD',
             'open_total' => round((float) $open->sum(fn ($c) => (float) $c->value), 2),
-            'won_mtd'    => round($wonMtd, 2),
-            'stages'     => $stages,
-            'aging'      => $aging,
+            'won_mtd' => round($wonMtd, 2),
+            'open_count' => $open->count(),
+            'top_deal' => $topDeal ? [
+                'id' => $topDeal->id,
+                'board_id' => $topDeal->board_id,
+                'name' => $topDeal->name,
+                'value' => (float) $topDeal->value,
+                'stage' => $sectionMeta[$topDeal->section_id]['name'] ?? null,
+            ] : null,
+            'stages' => $stages,
+            'aging' => $aging,
         ];
     }
 
@@ -237,11 +277,11 @@ class DashboardModelRepository
             ->limit(10)
             ->get()
             ->map(fn ($l) => [
-                'title'        => $l->title,
-                'number'       => $l->number,
-                'state'        => $l->state,
+                'title' => $l->title,
+                'number' => $l->number,
+                'state' => $l->state,
                 'checks_state' => $l->checks_state,
-                'url'          => $l->html_url ?? $l->url,
+                'url' => $l->html_url ?? $l->url,
             ]);
     }
 
@@ -253,39 +293,91 @@ class DashboardModelRepository
             ->latest()
             ->limit(15)
             ->get()
-            ->map(fn ($a) => [
-                'id'          => $a->id,
-                'board_id'    => $a->board_id,
-                'type'        => $a->type,
-                'actor'       => $a->user?->name,
-                'description' => $a->description,
-                'created_at'  => $a->created_at,
-            ]);
+            ->map(function ($a) {
+                $actor = $a->user?->name;
+                $description = $a->description;
+                // Legacy rows embedded the actor name in the description; strip it
+                // so "actor + description" doesn't render as "Sam Sam created…".
+                if ($actor !== null && str_starts_with($description, $actor.' ')) {
+                    $description = substr($description, strlen($actor) + 1);
+                }
+
+                return [
+                    'id' => $a->id,
+                    'board_id' => $a->board_id,
+                    'type' => $a->type,
+                    'actor' => $actor,
+                    'description' => $description,
+                    'created_at' => $a->created_at,
+                ];
+            });
+    }
+
+    /**
+     * Per-project live signal for the dashboard project cards: done/total open
+     * work and the most recent activity timestamp across the project's boards.
+     */
+    private function projectsMeta(Collection $boardIds): Collection
+    {
+        $boards = Board::whereIn('id', $boardIds)
+            ->whereNotNull('project_id')
+            ->get(['id', 'project_id']);
+
+        if ($boards->isEmpty()) {
+            return collect();
+        }
+
+        $cardAgg = Card::whereIn('board_id', $boards->pluck('id'))
+            ->whereNull('archived_at')
+            ->selectRaw('board_id, count(*) as total, count(done_at) as done')
+            ->groupBy('board_id')
+            ->get()
+            ->keyBy('board_id');
+
+        $lastActivity = BoardActivity::whereIn('board_id', $boards->pluck('id'))
+            ->selectRaw('board_id, max(created_at) as last_at')
+            ->groupBy('board_id')
+            ->get()
+            ->keyBy('board_id');
+
+        return $boards->groupBy('project_id')
+            ->map(function ($projectBoards, $projectId) use ($cardAgg, $lastActivity) {
+                $total = 0;
+                $done = 0;
+                $last = null;
+                foreach ($projectBoards as $b) {
+                    $agg = $cardAgg->get($b->id);
+                    $total += (int) ($agg->total ?? 0);
+                    $done += (int) ($agg->done ?? 0);
+                    $boardLast = $lastActivity->get($b->id)?->last_at;
+                    if ($boardLast !== null && ($last === null || $boardLast > $last)) {
+                        $last = $boardLast;
+                    }
+                }
+
+                return [
+                    'id' => (int) $projectId,
+                    'done' => $done,
+                    'total' => $total,
+                    'last_activity' => $last,
+                ];
+            })
+            ->values();
     }
 
     private function mapCard(Card $c): array
     {
         return [
-            'id'           => $c->id,
-            'name'         => $c->name,
-            'board_id'     => $c->board_id,
-            'board_name'   => $c->board?->name,
-            'section'      => $c->section?->name,
-            'priority'     => $c->priority,
-            'due_date'     => $c->due_date?->toDateString(),
+            'id' => $c->id,
+            'name' => $c->name,
+            'board_id' => $c->board_id,
+            'board_name' => $c->board?->name,
+            'section' => $c->section?->name,
+            'priority' => $c->priority,
+            'due_date' => $c->due_date?->toDateString(),
             'story_points' => $c->story_points,
-            'value'        => $c->value !== null ? (float) $c->value : null,
-            'ticket_key'   => $this->ticketKey($c->board?->ticket_prefix, $c->ticket_number),
+            'value' => $c->value !== null ? (float) $c->value : null,
+            'ticket_key' => Card::ticketKey($c->board?->ticket_prefix, $c->ticket_number),
         ];
-    }
-
-    /** Mirrors CardModelRepository::composeTicketKey — "YON-42" / "#42" / "". */
-    private function ticketKey(?string $prefix, ?int $number): string
-    {
-        if ($number === null) {
-            return '';
-        }
-
-        return $prefix ? "{$prefix}-{$number}" : "#{$number}";
     }
 }

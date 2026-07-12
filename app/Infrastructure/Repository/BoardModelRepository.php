@@ -31,13 +31,6 @@ class BoardModelRepository implements BoardRepository
             ->withCount('cards')
             ->get();
 
-        $flattenPermissions = fn ($boards) => $boards->each(
-            fn ($b) => $b->sharedWith->each(fn ($u) => $u->permission = $u->pivot->permission ?? 'write')
-        );
-
-        $flattenPermissions($owned);
-        $flattenPermissions($shared);
-
         return ['owned' => $owned->values(), 'shared' => $shared->values()];
     }
 
@@ -59,30 +52,9 @@ class BoardModelRepository implements BoardRepository
             'owner:id,name,email',
         ])->findOrFail($id);
         $this->authorizeAccess($board);
-        // Attach the human-facing ticket key (YON-42 / #42) to each card.
-        $board->cards->each(fn ($c) => $c->ticket_key = CardModelRepository::composeTicketKey($board->ticket_prefix, $c->ticket_number));
-        $board->sharedWith->each(fn ($u) => $u->permission = $u->pivot->permission ?? 'write');
-        // Expose the current user's capabilities so the client can gate editing/managing
-        // without re-deriving the (project-aware) permission rules.
-        $uid = Auth::id();
-        $board->can_write = $board->isWritableBy($uid);
-        $board->can_manage = $board->isOwnedBy($uid);
-        // GitHub: expose whether a token is set (never the token itself). The webhook
-        // secret is only useful to — and only shown to — managers setting up the hook.
-        $board->github_connected = filled($board->github_token);
-        if (! $board->can_manage) {
-            $board->github_webhook_secret = null;
-        }
-        $board->makeHidden('github_token');
 
-        // WhatsApp: expose connected state, hide the secrets. The verify token is
-        // needed to configure the Meta webhook, so it's shown to managers only.
-        $board->whatsapp_connected = filled($board->whatsapp_token);
-        if (! $board->can_manage) {
-            $board->whatsapp_verify_token = null;
-        }
-        $board->makeHidden(['whatsapp_token', 'whatsapp_app_secret']);
-
+        // Serialization (ticket keys, capabilities, connected flags, secret
+        // redaction) lives in BoardResource — the repository returns the model.
         return $board;
     }
 
@@ -187,12 +159,7 @@ class BoardModelRepository implements BoardRepository
         }
         $board->save();
 
-        $fresh = $board->fresh()->load(['owner:id,name', 'sharedWith:id,name'])->loadCount('cards');
-        $fresh->github_connected = filled($fresh->github_token);
-        $fresh->whatsapp_connected = filled($fresh->whatsapp_token);
-        $fresh->makeHidden(['github_token', 'whatsapp_token', 'whatsapp_app_secret']);
-
-        return $fresh;
+        return $board->fresh()->load(['owner:id,name', 'sharedWith:id,name'])->loadCount('cards');
     }
 
     public function setArchived(int $id, bool $archived)

@@ -18,8 +18,8 @@ abstract class Controller
     {
         $board = Board::findOrFail($boardId);
 
-        if (!$board->isAccessibleBy(Auth::id())) {
-            throw new AccessDeniedHttpException();
+        if (! $board->isAccessibleBy(Auth::id())) {
+            throw new AccessDeniedHttpException;
         }
 
         return $board;
@@ -30,7 +30,7 @@ abstract class Controller
         $board = Board::findOrFail($boardId);
 
         if (Auth::id() !== $board->user_id) {
-            throw new AccessDeniedHttpException();
+            throw new AccessDeniedHttpException;
         }
 
         return $board;
@@ -40,8 +40,8 @@ abstract class Controller
     {
         $board = Board::findOrFail($boardId);
 
-        if (!$board->isWritableBy(Auth::id())) {
-            throw new AccessDeniedHttpException();
+        if (! $board->isWritableBy(Auth::id())) {
+            throw new AccessDeniedHttpException;
         }
 
         return $board;
@@ -55,8 +55,8 @@ abstract class Controller
     {
         $board = Board::findOrFail($boardId);
 
-        if (!$board->isOwnedBy(Auth::id())) {
-            throw new AccessDeniedHttpException();
+        if (! $board->isOwnedBy(Auth::id())) {
+            throw new AccessDeniedHttpException;
         }
 
         return $board;

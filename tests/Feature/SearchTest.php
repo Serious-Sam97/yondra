@@ -11,11 +11,11 @@ function seedSearch(User $u): void
     $project = Project::create(['owner_id' => $u->id, 'name' => 'Core', 'description' => '']);
 
     $board = Board::create(['user_id' => $u->id, 'project_id' => $project->id, 'name' => 'Marketing', 'description' => '', 'ticket_prefix' => 'MKT']);
-    $todo  = Section::create(['board_id' => $board->id, 'name' => 'To Do', 'order' => 0]);
+    $todo = Section::create(['board_id' => $board->id, 'name' => 'To Do', 'order' => 0]);
     Card::create(['board_id' => $board->id, 'section_id' => $todo->id, 'name' => 'Launch plan', 'description' => '', 'ticket_number' => 42]);
     Card::create(['board_id' => $board->id, 'section_id' => $todo->id, 'name' => 'Fix bug', 'description' => '']);
 
-    $crm  = Board::create(['user_id' => $u->id, 'project_id' => $project->id, 'name' => 'Sales', 'description' => '', 'type' => 'crm', 'currency' => 'USD']);
+    $crm = Board::create(['user_id' => $u->id, 'project_id' => $project->id, 'name' => 'Sales', 'description' => '', 'type' => 'crm', 'currency' => 'USD']);
     $lead = Section::create(['board_id' => $crm->id, 'name' => 'Lead', 'order' => 0]);
     Card::create(['board_id' => $crm->id, 'section_id' => $lead->id, 'name' => 'Acme deal', 'description' => '', 'value' => 1000]);
 }
@@ -63,8 +63,8 @@ it('scopes results to the authenticated user', function () {
     seedSearch($me);
 
     $other = User::factory()->create();
-    $ob    = Board::create(['user_id' => $other->id, 'name' => 'SecretBoard', 'description' => '']);
-    $os    = Section::create(['board_id' => $ob->id, 'name' => 'To Do', 'order' => 0]);
+    $ob = Board::create(['user_id' => $other->id, 'name' => 'SecretBoard', 'description' => '']);
+    $os = Section::create(['board_id' => $ob->id, 'name' => 'To Do', 'order' => 0]);
     Card::create(['board_id' => $ob->id, 'section_id' => $os->id, 'name' => 'Secret card', 'description' => '']);
 
     $res = $this->actingAs($me)->getJson('/api/search?q=Secret')->assertOk();

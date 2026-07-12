@@ -1,17 +1,21 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Domain;
 
 use DateTimeImmutable;
 
-
 final class Board
 {
     private ?int $id;
+
     private string $name;
+
     private ?string $description;
+
     private DateTimeImmutable $createdAt;
+
     private DateTimeImmutable $updatedAt;
 
     public function __construct(?int $id, string $name, ?string $description = null, ?DateTimeImmutable $createdAt = null)
@@ -19,7 +23,7 @@ final class Board
         $this->id = $id;
         $this->name = $name;
         $this->description = $description;
-        $this->createdAt = $createdAt ?? new DateTimeImmutable();
+        $this->createdAt = $createdAt ?? new DateTimeImmutable;
     }
 
     public static function create(string $name, ?string $description = null): self
@@ -75,6 +79,7 @@ final class Board
     public static function fromArray(array $data): self
     {
         $createdAt = isset($data['created_at']) ? new DateTimeImmutable($data['created_at']) : null;
+
         return new self(
             $data['id'] ?? null,
             $data['name'] ?? '',

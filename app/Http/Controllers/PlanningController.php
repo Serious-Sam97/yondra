@@ -20,9 +20,12 @@ class PlanningController extends Controller
     {
         $board = $this->authorizeBoard($boardId);
         $this->boardCard($boardId, $cardId);
-        if ($board->type !== 'scrum') return response()->noContent();
+        if ($board->type !== 'scrum') {
+            return response()->noContent();
+        }
 
         $session = PlanningSession::where('card_id', $cardId)->first();
+
         // 204 (not json(null)) — Symfony's JsonResponse encodes null as "{}".
         return $session ? response()->json($this->snapshot($session)) : response()->noContent();
     }
@@ -91,7 +94,9 @@ class PlanningController extends Controller
     {
         $this->authorizeScrumBoard($boardId);
         $session = PlanningSession::where('card_id', $cardId)->first();
-        if (!$session) return response()->noContent();
+        if (! $session) {
+            return response()->noContent();
+        }
 
         $session->votes()->where('round', $session->round)->where('user_id', Auth::id())->delete();
 
@@ -99,6 +104,7 @@ class PlanningController extends Controller
         if ($session->votes()->where('round', $session->round)->count() === 0) {
             $session->delete();
             broadcast(new BoardEvent($boardId, 'planning.updated', ['card_id' => $cardId, 'board_id' => $boardId, 'cleared' => true]));
+
             return response()->noContent();
         }
 
@@ -120,6 +126,7 @@ class PlanningController extends Controller
         // Return the planning snapshot (its applied_value now reflects the new points)
         // so the card's story-points field can sync; fall back to the card if no session.
         $session = PlanningSession::where('card_id', $cardId)->first();
+
         return $session ? $this->broadcastSnapshot($session) : response()->json($card->fresh());
     }
 
@@ -131,6 +138,7 @@ class PlanningController extends Controller
         if ($board->type !== 'scrum') {
             abort(422, 'Planning Poker is only available on Scrum boards.');
         }
+
         return $board;
     }
 
@@ -143,26 +151,27 @@ class PlanningController extends Controller
     {
         $snapshot = $this->snapshot($session);
         broadcast(new BoardEvent($session->board_id, 'planning.updated', $snapshot));
+
         return response()->json($snapshot);
     }
 
     // The anonymity gate: values are only included once the round is revealed.
     private function snapshot(PlanningSession $session): array
     {
-        $card  = Card::find($session->card_id);
+        $card = Card::find($session->card_id);
         $votes = $session->votes()->where('round', $session->round)->with('user:id,name')->get();
 
         return [
-            'card_id'       => $session->card_id,
-            'board_id'      => $session->board_id,
-            'round'         => $session->round,
-            'revealed'      => (bool) $session->revealed,
-            'started_by'    => $session->started_by_user_id,
-            'participants'  => $votes->map(fn (PlanningVote $v) => [
-                'user_id'   => $v->user_id,
-                'name'      => $v->user?->name ?? 'Unknown',
+            'card_id' => $session->card_id,
+            'board_id' => $session->board_id,
+            'round' => $session->round,
+            'revealed' => (bool) $session->revealed,
+            'started_by' => $session->started_by_user_id,
+            'participants' => $votes->map(fn (PlanningVote $v) => [
+                'user_id' => $v->user_id,
+                'name' => $v->user?->name ?? 'Unknown',
                 'has_voted' => $v->value !== null,
-                'value'     => $session->revealed ? $v->value : null,
+                'value' => $session->revealed ? $v->value : null,
             ])->values()->all(),
             'applied_value' => $card?->story_points,
         ];

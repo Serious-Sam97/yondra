@@ -10,11 +10,11 @@ use Illuminate\Support\Facades\Mail;
 
 function emailSeed(): array
 {
-    $owner  = User::factory()->create(['name' => 'Owner Person']);
+    $owner = User::factory()->create(['name' => 'Owner Person']);
     $member = User::factory()->create(['name' => 'Jane Doe', 'email' => 'jane@example.com']);
-    $board  = Board::create(['user_id' => $owner->id, 'name' => 'Board', 'description' => '']);
-    $todo   = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
-    $card   = Card::create(['board_id' => $board->id, 'section_id' => $todo->id, 'name' => 'Task', 'description' => '']);
+    $board = Board::create(['user_id' => $owner->id, 'name' => 'Board', 'description' => '']);
+    $todo = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
+    $card = Card::create(['board_id' => $board->id, 'section_id' => $todo->id, 'name' => 'Task', 'description' => '']);
     BoardShare::create(['board_id' => $board->id, 'user_id' => $member->id, 'permission' => 'write']);
 
     return [$owner, $member, $board, $todo, $card];

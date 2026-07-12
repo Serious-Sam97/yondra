@@ -7,7 +7,10 @@ namespace App\Domain\Repository;
 interface TagRepository
 {
     public function forBoard(int $boardId): mixed;
+
     public function save(array $data): mixed;
+
     public function update(int $boardId, int $id, array $data): mixed;
+
     public function delete(int $boardId, int $id): void;
 }

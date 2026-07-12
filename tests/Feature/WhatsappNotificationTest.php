@@ -44,6 +44,7 @@ it('delivers a notification over WhatsApp when the user opted in', function () {
 
     Http::assertSent(function ($req) {
         $body = json_encode($req->data());
+
         return str_contains($req->url(), '111222333/messages')
             && str_contains($body, 'yondra_alert')
             && str_contains($body, '5511888');

@@ -19,14 +19,14 @@ class GitHubService
     public function parse(string $url): ?array
     {
         // https://github.com/{owner}/{repo}/(pull|issues)/{number}
-        if (!preg_match('#github\.com/([^/]+)/([^/]+)/(pull|issues)/(\d+)#i', $url, $m)) {
+        if (! preg_match('#github\.com/([^/]+)/([^/]+)/(pull|issues)/(\d+)#i', $url, $m)) {
             return null;
         }
 
         return [
-            'type'   => $m[3] === 'pull' ? 'pr' : 'issue',
-            'owner'  => $m[1],
-            'repo'   => $m[2],
+            'type' => $m[3] === 'pull' ? 'pr' : 'issue',
+            'owner' => $m[1],
+            'repo' => $m[2],
             'number' => (int) $m[4],
         ];
     }
@@ -41,18 +41,18 @@ class GitHubService
         $board = $link->board ?: Board::find($link->board_id);
         $token = $board?->github_token ?: config('services.github.token');
 
-        if (!$link->owner || !$link->repo || !$link->number || !$token) {
+        if (! $link->owner || ! $link->repo || ! $link->number || ! $token) {
             return $link;
         }
 
-        $base     = rtrim((string) config('services.github.api_url'), '/');
+        $base = rtrim((string) config('services.github.api_url'), '/');
         $endpoint = $link->type === 'pr' ? 'pulls' : 'issues';
-        $client   = Http::withToken($token)
+        $client = Http::withToken($token)
             ->withHeaders(['Accept' => 'application/vnd.github+json', 'User-Agent' => 'Yondra'])
             ->timeout(8);
 
         $res = $client->get("{$base}/repos/{$link->owner}/{$link->repo}/{$endpoint}/{$link->number}");
-        if (!$res->successful()) {
+        if (! $res->successful()) {
             return $link;
         }
 
@@ -79,14 +79,14 @@ class GitHubService
     public function applyResource(CardLink $link, array $data): void
     {
         $merged = (bool) data_get($data, 'merged', false) || filled(data_get($data, 'merged_at'));
-        $draft  = (bool) data_get($data, 'draft', false);
-        $state  = data_get($data, 'state'); // open | closed
+        $draft = (bool) data_get($data, 'draft', false);
+        $state = data_get($data, 'state'); // open | closed
 
-        $link->title  = data_get($data, 'title') ?? $link->title;
+        $link->title = data_get($data, 'title') ?? $link->title;
         $link->author = data_get($data, 'user.login') ?? $link->author;
         $link->html_url = data_get($data, 'html_url') ?? $link->html_url;
         $link->merged = $merged;
-        $link->state  = $merged ? 'merged' : ($draft && $state === 'open' ? 'draft' : $state);
+        $link->state = $merged ? 'merged' : ($draft && $state === 'open' ? 'draft' : $state);
     }
 
     private function mapCombinedStatus(?string $state): ?string
@@ -95,7 +95,7 @@ class GitHubService
             'success' => 'success',
             'failure', 'error' => 'failure',
             'pending' => 'pending',
-            default   => null,
+            default => null,
         };
     }
 }

@@ -19,6 +19,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // Attaches the 'api' rate limiter (defined in AppServiceProvider) to every API route.
+        $middleware->throttleApi();
+
         $middleware->alias([
             'vortex.admin' => EnsureVortexAdmin::class,
         ]);

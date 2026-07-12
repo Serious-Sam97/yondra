@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Events\ProjectEvent;
+use App\Http\Resources\BoardResource;
+use App\Http\Resources\BoardSummaryResource;
 use App\Infrastructure\Models\Project;
 use App\Services\BoardService;
 use Illuminate\Http\Request;
@@ -21,12 +23,20 @@ class BoardController extends Controller
 
     public function index()
     {
-        return $this->boardService->fetchAll();
+        $boards = $this->boardService->fetchAll();
+        $summaries = fn ($group) => $group->map(
+            fn ($board) => new BoardSummaryResource($board, withSharePermissions: true)
+        );
+
+        return [
+            'owned' => $summaries($boards['owned']),
+            'shared' => $summaries($boards['shared']),
+        ];
     }
 
     public function show(int $boardId)
     {
-        return $this->boardService->fetchOne($boardId);
+        return new BoardResource($this->boardService->fetchOne($boardId));
     }
 
     public function destroy(int $boardId)
@@ -60,7 +70,7 @@ class BoardController extends Controller
             ));
         }
 
-        return response()->json($board, 201);
+        return (new BoardSummaryResource($board))->response()->setStatusCode(201);
     }
 
     public function update(Request $request, int $boardId)
@@ -97,7 +107,7 @@ class BoardController extends Controller
 
         $validated['id'] = $boardId;
 
-        return $this->boardService->edit($validated);
+        return new BoardSummaryResource($this->boardService->edit($validated), withConnectionFlags: true);
     }
 
     public function archive(int $boardId)
@@ -123,10 +133,9 @@ class BoardController extends Controller
             'include_cards' => ['sometimes', 'boolean'],
         ]);
 
-        return response()->json(
-            $this->boardService->duplicate($boardId, $validated['name'] ?? null, (bool) ($validated['include_cards'] ?? false)),
-            201
-        );
+        $copy = $this->boardService->duplicate($boardId, $validated['name'] ?? null, (bool) ($validated['include_cards'] ?? false));
+
+        return (new BoardSummaryResource($copy))->response()->setStatusCode(201);
     }
 
     private function authorizeProject(?int $projectId): void

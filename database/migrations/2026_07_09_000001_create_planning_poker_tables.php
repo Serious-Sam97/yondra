@@ -1,10 +1,13 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
-    public function up(): void {
+return new class extends Migration
+{
+    public function up(): void
+    {
         // One live Planning Poker session per card (Scrum estimation).
         Schema::create('planning_sessions', function (Blueprint $table) {
             $table->id();
@@ -30,7 +33,8 @@ return new class extends Migration {
         });
     }
 
-    public function down(): void {
+    public function down(): void
+    {
         Schema::dropIfExists('planning_votes');
         Schema::dropIfExists('planning_sessions');
     }

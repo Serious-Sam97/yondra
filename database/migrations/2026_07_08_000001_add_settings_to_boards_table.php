@@ -1,10 +1,13 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
-    public function up(): void {
+return new class extends Migration
+{
+    public function up(): void
+    {
         Schema::table('boards', function (Blueprint $table) {
             // Board accent/theme key (an LED accent from the Cassette-Futurism set).
             $table->string('background', 40)->nullable()->after('next_ticket_number');
@@ -14,7 +17,9 @@ return new class extends Migration {
             $table->timestamp('archived_at')->nullable()->after('default_permission');
         });
     }
-    public function down(): void {
+
+    public function down(): void
+    {
         Schema::table('boards', function (Blueprint $table) {
             $table->dropColumn(['background', 'default_permission', 'archived_at']);
         });

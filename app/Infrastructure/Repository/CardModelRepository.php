@@ -28,39 +28,29 @@ class CardModelRepository implements CardRepository
 
             $position = Card::where('section_id', $request['section_id'])->max('position') + 1;
             $card = Card::create([
-                'board_id'           => $request['board_id'],
-                'section_id'         => $request['section_id'],
-                'assigned_user_id'   => $request['assigned_user_id'] ?? null,
+                'board_id' => $request['board_id'],
+                'section_id' => $request['section_id'],
+                'assigned_user_id' => $request['assigned_user_id'] ?? null,
                 'created_by_user_id' => Auth::id(),
-                'name'               => $request['name'],
-                'description'        => $request['description'] ?? '',
-                'due_date'           => $request['due_date'] ?? null,
-                'priority'           => $request['priority'] ?? null,
-                'position'           => $position,
-                'ticket_number'      => $ticketNumber,
-                'value'              => $request['value'] ?? null,
-                'story_points'       => $request['story_points'] ?? null,
-                'sprint_id'          => $request['sprint_id'] ?? null,
+                'name' => $request['name'],
+                'description' => $request['description'] ?? '',
+                'due_date' => $request['due_date'] ?? null,
+                'priority' => $request['priority'] ?? null,
+                'position' => $position,
+                'ticket_number' => $ticketNumber,
+                'value' => $request['value'] ?? null,
+                'story_points' => $request['story_points'] ?? null,
+                'sprint_id' => $request['sprint_id'] ?? null,
                 // Stamp stage entry so per-stage SLA aging measures from creation.
                 'section_entered_at' => now(),
             ]);
 
-            if (!empty($request['tag_ids'])) {
+            if (! empty($request['tag_ids'])) {
                 $card->tags()->sync($request['tag_ids']);
             }
 
-            $card->ticket_key = self::composeTicketKey($board->ticket_prefix, $ticketNumber);
-            return $card->load(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links', 'documents'])->toArray();
+            return $card->load(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links', 'documents']);
         });
-    }
-
-    /** Human-facing card key: "YON-42" when a prefix is set, else "#42". */
-    public static function composeTicketKey(?string $prefix, ?int $number): string
-    {
-        if ($number === null) {
-            return '';
-        }
-        return $prefix ? "{$prefix}-{$number}" : "#{$number}";
     }
 
     public function update($request)
@@ -85,19 +75,19 @@ class CardModelRepository implements CardRepository
         }
 
         $card->update([
-            'section_id'         => $newSectionId,
-            'assigned_user_id'   => array_key_exists('assigned_user_id', $request)
+            'section_id' => $newSectionId,
+            'assigned_user_id' => array_key_exists('assigned_user_id', $request)
                 ? $request['assigned_user_id']
                 : $card->assigned_user_id,
-            'name'               => $request['name'] ?? $card->name,
-            'description'        => $request['description'] ?? $card->description,
-            'due_date'           => array_key_exists('due_date', $request) ? $request['due_date'] : $card->due_date,
-            'priority'           => array_key_exists('priority', $request) ? $request['priority'] : $card->priority,
-            'position'           => $request['position'] ?? $card->position,
-            'value'              => array_key_exists('value', $request) ? $request['value'] : $card->value,
-            'story_points'       => array_key_exists('story_points', $request) ? $request['story_points'] : $card->story_points,
-            'sprint_id'          => array_key_exists('sprint_id', $request) ? $request['sprint_id'] : $card->sprint_id,
-            'done_at'            => $doneAt,
+            'name' => $request['name'] ?? $card->name,
+            'description' => $request['description'] ?? $card->description,
+            'due_date' => array_key_exists('due_date', $request) ? $request['due_date'] : $card->due_date,
+            'priority' => array_key_exists('priority', $request) ? $request['priority'] : $card->priority,
+            'position' => $request['position'] ?? $card->position,
+            'value' => array_key_exists('value', $request) ? $request['value'] : $card->value,
+            'story_points' => array_key_exists('story_points', $request) ? $request['story_points'] : $card->story_points,
+            'sprint_id' => array_key_exists('sprint_id', $request) ? $request['sprint_id'] : $card->sprint_id,
+            'done_at' => $doneAt,
             'section_entered_at' => $sectionEnteredAt,
         ]);
 
@@ -105,10 +95,8 @@ class CardModelRepository implements CardRepository
             $card->tags()->sync($request['tag_ids'] ?? []);
         }
 
-        $fresh = $card->fresh()->load(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links', 'documents']);
-        $board = Board::find($fresh->board_id);
-        $fresh->ticket_key = self::composeTicketKey($board?->ticket_prefix, $fresh->ticket_number);
-        return $fresh->toArray();
+        // ticket_key is appended by CardResource at the HTTP boundary.
+        return $card->fresh()->load(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links', 'documents']);
     }
 
     public function delete($request)

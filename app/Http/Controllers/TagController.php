@@ -18,14 +18,14 @@ class TagController extends Controller
     {
         $this->authorizeWrite($boardId);
         $validated = $request->validate([
-            'name'  => ['required', 'string', 'max:50'],
+            'name' => ['required', 'string', 'max:50'],
             'color' => ['required', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
         ]);
 
         $tag = $this->tagService->create([
             'board_id' => $boardId,
-            'name'     => $validated['name'],
-            'color'    => $validated['color'],
+            'name' => $validated['name'],
+            'color' => $validated['color'],
         ]);
 
         return response()->json($tag, 201);
@@ -35,7 +35,7 @@ class TagController extends Controller
     {
         $this->authorizeWrite($boardId);
         $validated = $request->validate([
-            'name'  => ['sometimes', 'string', 'max:50'],
+            'name' => ['sometimes', 'string', 'max:50'],
             'color' => ['sometimes', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
         ]);
 
@@ -46,6 +46,7 @@ class TagController extends Controller
     {
         $this->authorizeWrite($boardId);
         $this->tagService->remove($boardId, $tagId);
+
         return response()->json(null, 204);
     }
 }

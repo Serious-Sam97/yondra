@@ -12,15 +12,17 @@ class PlanningVote extends Model
     ];
 
     protected $casts = [
-        'round'    => 'integer',
+        'round' => 'integer',
         'voted_at' => 'datetime',
     ];
 
-    public function session(): BelongsTo {
+    public function session(): BelongsTo
+    {
         return $this->belongsTo(PlanningSession::class, 'planning_session_id');
     }
 
-    public function user(): BelongsTo {
+    public function user(): BelongsTo
+    {
         return $this->belongsTo(User::class);
     }
 }

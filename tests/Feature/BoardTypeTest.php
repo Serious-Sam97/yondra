@@ -32,15 +32,15 @@ it('defaults a board to kanban with the classic lanes', function () {
 });
 
 it('stores a deal value on a card', function () {
-    $user    = User::factory()->create();
-    $board   = Board::create(['user_id' => $user->id, 'name' => 'Sales', 'description' => '', 'type' => 'crm']);
+    $user = User::factory()->create();
+    $board = Board::create(['user_id' => $user->id, 'name' => 'Sales', 'description' => '', 'type' => 'crm']);
     $section = Section::create(['board_id' => $board->id, 'name' => 'Lead In']);
 
     $this->actingAs($user)
         ->postJson("/api/boards/{$board->id}/cards", [
             'section_id' => $section->id,
-            'name'       => 'Big client',
-            'value'      => 12000.50,
+            'name' => 'Big client',
+            'value' => 12000.50,
         ])
         ->assertCreated()
         ->assertJsonFragment(['value' => '12000.50']);
@@ -49,8 +49,8 @@ it('stores a deal value on a card', function () {
 });
 
 it('stamps section_entered_at on create and refreshes it on stage change', function () {
-    $user     = User::factory()->create();
-    $board    = Board::create(['user_id' => $user->id, 'name' => 'Sales', 'description' => '', 'type' => 'crm']);
+    $user = User::factory()->create();
+    $board = Board::create(['user_id' => $user->id, 'name' => 'Sales', 'description' => '', 'type' => 'crm']);
     $sectionA = Section::create(['board_id' => $board->id, 'name' => 'Lead In']);
     $sectionB = Section::create(['board_id' => $board->id, 'name' => 'Won']);
 
@@ -69,11 +69,11 @@ it('stamps section_entered_at on create and refreshes it on stage change', funct
 });
 
 it('keeps section_entered_at when the card stays in the same stage', function () {
-    $user    = User::factory()->create();
-    $board   = Board::create(['user_id' => $user->id, 'name' => 'Sales', 'description' => '', 'type' => 'crm']);
+    $user = User::factory()->create();
+    $board = Board::create(['user_id' => $user->id, 'name' => 'Sales', 'description' => '', 'type' => 'crm']);
     $section = Section::create(['board_id' => $board->id, 'name' => 'Lead In']);
     $entered = now()->subDays(2);
-    $card    = Card::create([
+    $card = Card::create([
         'board_id' => $board->id, 'section_id' => $section->id, 'name' => 'Deal', 'description' => '',
         'section_entered_at' => $entered,
     ]);
@@ -87,8 +87,8 @@ it('keeps section_entered_at when the card stays in the same stage', function ()
 });
 
 it('configures per-stage aging hours', function () {
-    $user    = User::factory()->create();
-    $board   = Board::create(['user_id' => $user->id, 'name' => 'Sales', 'description' => '', 'type' => 'crm']);
+    $user = User::factory()->create();
+    $board = Board::create(['user_id' => $user->id, 'name' => 'Sales', 'description' => '', 'type' => 'crm']);
     $section = Section::create(['board_id' => $board->id, 'name' => 'Lead In']);
 
     $this->actingAs($user)
@@ -100,10 +100,10 @@ it('configures per-stage aging hours', function () {
 });
 
 it('marks a card done when it enters the configured done/won column', function () {
-    $user  = User::factory()->create();
+    $user = User::factory()->create();
     $board = Board::create(['user_id' => $user->id, 'name' => 'Sales', 'description' => '', 'type' => 'crm']);
-    $lead  = Section::create(['board_id' => $board->id, 'name' => 'Lead In']);
-    $won   = Section::create(['board_id' => $board->id, 'name' => 'Won']);
+    $lead = Section::create(['board_id' => $board->id, 'name' => 'Lead In']);
+    $won = Section::create(['board_id' => $board->id, 'name' => 'Won']);
 
     // Configure "Won" as the done column.
     $this->actingAs($user)
@@ -127,11 +127,11 @@ it('marks a card done when it enters the configured done/won column', function (
 });
 
 it('does not mark a card done in a plain Won column when none is configured', function () {
-    $user  = User::factory()->create();
+    $user = User::factory()->create();
     $board = Board::create(['user_id' => $user->id, 'name' => 'Sales', 'description' => '', 'type' => 'crm']);
-    $lead  = Section::create(['board_id' => $board->id, 'name' => 'Lead In']);
-    $won   = Section::create(['board_id' => $board->id, 'name' => 'Won']);
-    $card  = Card::create(['board_id' => $board->id, 'section_id' => $lead->id, 'name' => 'Deal', 'description' => '']);
+    $lead = Section::create(['board_id' => $board->id, 'name' => 'Lead In']);
+    $won = Section::create(['board_id' => $board->id, 'name' => 'Won']);
+    $card = Card::create(['board_id' => $board->id, 'section_id' => $lead->id, 'name' => 'Deal', 'description' => '']);
 
     // No done_section_id set + column isn't named "Done" → not done.
     $this->actingAs($user)
@@ -141,11 +141,11 @@ it('does not mark a card done in a plain Won column when none is configured', fu
 });
 
 it('falls back to a "Done"-named column when no done column is configured', function () {
-    $user  = User::factory()->create();
+    $user = User::factory()->create();
     $board = Board::create(['user_id' => $user->id, 'name' => 'Work', 'description' => '', 'type' => 'kanban']);
-    $todo  = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
-    $done  = Section::create(['board_id' => $board->id, 'name' => 'Done']);
-    $card  = Card::create(['board_id' => $board->id, 'section_id' => $todo->id, 'name' => 'Task', 'description' => '']);
+    $todo = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
+    $done = Section::create(['board_id' => $board->id, 'name' => 'Done']);
+    $card = Card::create(['board_id' => $board->id, 'section_id' => $todo->id, 'name' => 'Task', 'description' => '']);
 
     $this->actingAs($user)
         ->putJson("/api/boards/{$board->id}/cards/{$card->id}", ['section_id' => $done->id])
@@ -155,7 +155,7 @@ it('falls back to a "Done"-named column when no done column is configured', func
 
 it('creates sprints in the backlog and deletes them', function () {
     // Full start/complete lifecycle lives in SprintLifecycleTest; this covers basic CRUD.
-    $user  = User::factory()->create();
+    $user = User::factory()->create();
     $board = Board::create(['user_id' => $user->id, 'name' => 'Scrum', 'description' => '', 'type' => 'scrum']);
 
     $s1 = $this->actingAs($user)
@@ -176,17 +176,17 @@ it('creates sprints in the backlog and deletes them', function () {
 });
 
 it('assigns a card to a sprint with story points', function () {
-    $user    = User::factory()->create();
-    $board   = Board::create(['user_id' => $user->id, 'name' => 'Scrum', 'description' => '', 'type' => 'scrum']);
+    $user = User::factory()->create();
+    $board = Board::create(['user_id' => $user->id, 'name' => 'Scrum', 'description' => '', 'type' => 'scrum']);
     $section = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
-    $sprint  = Sprint::create(['board_id' => $board->id, 'name' => 'Sprint 1', 'is_active' => true]);
+    $sprint = Sprint::create(['board_id' => $board->id, 'name' => 'Sprint 1', 'is_active' => true]);
 
     $this->actingAs($user)
         ->postJson("/api/boards/{$board->id}/cards", [
-            'section_id'   => $section->id,
-            'name'         => 'Story',
+            'section_id' => $section->id,
+            'name' => 'Story',
             'story_points' => 5,
-            'sprint_id'    => $sprint->id,
+            'sprint_id' => $sprint->id,
         ])
         ->assertCreated()
         ->assertJsonFragment(['story_points' => 5, 'sprint_id' => $sprint->id]);
