@@ -70,4 +70,9 @@ return [
         ],
     ],
 
+    // GIF picker in the comment composer (proxied server-side; no key → hidden).
+    'tenor' => [
+        'key' => env('TENOR_API_KEY'),
+    ],
+
 ];

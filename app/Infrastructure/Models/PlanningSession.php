@@ -9,12 +9,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class PlanningSession extends Model
 {
     protected $fillable = [
-        'board_id', 'card_id', 'round', 'revealed', 'started_by_user_id',
+        'board_id', 'card_id', 'round', 'revealed', 'started_by_user_id', 'applied_at',
+        'deck', 'timer_ends_at',
     ];
 
     protected $casts = [
         'round' => 'integer',
         'revealed' => 'boolean',
+        'applied_at' => 'datetime',
+        'timer_ends_at' => 'datetime',
     ];
 
     public function board(): BelongsTo

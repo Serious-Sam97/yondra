@@ -8,12 +8,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class PlanningVote extends Model
 {
     protected $fillable = [
-        'planning_session_id', 'user_id', 'round', 'value', 'voted_at',
+        'planning_session_id', 'user_id', 'round', 'value', 'voted_at', 'last_seen_at',
+        'is_spectator',
     ];
 
     protected $casts = [
         'round' => 'integer',
         'voted_at' => 'datetime',
+        'last_seen_at' => 'datetime',
+        'is_spectator' => 'boolean',
     ];
 
     public function session(): BelongsTo

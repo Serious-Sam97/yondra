@@ -13,6 +13,7 @@ use App\Http\Controllers\CardImageController;
 use App\Http\Controllers\CardLinkController;
 use App\Http\Controllers\CardTemplateController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\GifController;
 use App\Http\Controllers\GitHubWebhookController;
 use App\Http\Controllers\ImageUploadController;
 use App\Http\Controllers\NotificationController;
@@ -109,6 +110,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/boards/{boardId}/cards/{cardId}/comments', [CardCommentController::class, 'store']);
     Route::put('/boards/{boardId}/cards/{cardId}/comments/{commentId}', [CardCommentController::class, 'update']);
     Route::delete('/boards/{boardId}/cards/{cardId}/comments/{commentId}', [CardCommentController::class, 'destroy']);
+    Route::get('/boards/{boardId}/cards/{cardId}/comments/{commentId}/replies', [CardCommentController::class, 'replies']);
+    Route::post('/boards/{boardId}/cards/{cardId}/comments/{commentId}/reactions', [CardCommentController::class, 'react']);
+
+    // GIF picker (Tenor proxy — key stays server-side; hidden in the UI when unset).
+    Route::get('/gifs/availability', [GifController::class, 'availability']);
+    Route::get('/gifs/search', [GifController::class, 'search']);
 
     // WhatsApp thread on a card: read the conversation, reply to the customer.
     Route::get('/boards/{boardId}/cards/{cardId}/whatsapp', [WhatsappController::class, 'show']);
@@ -138,6 +145,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/boards/{boardId}/cards/{cardId}/planning/reveal', [PlanningController::class, 'reveal']);
     Route::post('/boards/{boardId}/cards/{cardId}/planning/reset', [PlanningController::class, 'reset']);
     Route::post('/boards/{boardId}/cards/{cardId}/planning/apply', [PlanningController::class, 'apply']);
+    Route::post('/boards/{boardId}/cards/{cardId}/planning/ping', [PlanningController::class, 'ping']);
+    Route::post('/boards/{boardId}/cards/{cardId}/planning/timer', [PlanningController::class, 'timer']);
 
     // Sentinel (QA) — N test cases per card, each with N runs (reports).
     Route::get('/boards/{boardId}/cards/{cardId}/qa', [QaController::class, 'index']);
