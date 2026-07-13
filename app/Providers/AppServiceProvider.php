@@ -76,6 +76,11 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('auth', function (Request $request) {
             return Limit::perMinute(5)->by($request->ip());
         });
+        // AI endpoints each cost an outbound LLM call (tokens/money) — keep a tight
+        // per-user ceiling so a stuck client or abuse can't run up the bill.
+        RateLimiter::for('ai', function (Request $request) {
+            return Limit::perMinute(20)->by($request->user()?->id ?: $request->ip());
+        });
 
         app('router')->middlewareGroup('web', [
             EnsureFrontendRequestsAreStateful::class,

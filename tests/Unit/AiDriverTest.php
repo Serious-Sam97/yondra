@@ -133,6 +133,39 @@ it('OllamaDriver: OpenAI-compatible stream against localhost, no auth header', f
     });
 });
 
+it('AnthropicDriver: complete() returns non-streaming text and omits stream', function () {
+    config([
+        'services.ai.anthropic.api_key' => 'sk-test',
+        'services.ai.anthropic.base_url' => 'https://api.anthropic.com',
+        'services.ai.anthropic.version' => '2023-06-01',
+        'services.ai.anthropic.model' => 'claude-opus-4-8',
+    ]);
+    Http::fake(['api.anthropic.com/*' => Http::response([
+        'content' => [['type' => 'text', 'text' => '{"points":5}']],
+    ], 200)]);
+
+    $out = app(AnthropicDriver::class)->complete('SYS', [['role' => 'user', 'content' => 'q']], 400, true);
+
+    expect($out)->toBe('{"points":5}');
+    Http::assertSent(fn ($r) => ! isset($r['stream']) && $r['system'] === 'SYS');
+});
+
+it('GroqDriver: complete() sets OpenAI json mode and reads choices.message.content', function () {
+    config([
+        'services.ai.groq.api_key' => 'gsk-test',
+        'services.ai.groq.base_url' => 'https://api.groq.com/openai/v1',
+        'services.ai.groq.model' => 'llama-3.3-70b-versatile',
+    ]);
+    Http::fake(['api.groq.com/*' => Http::response([
+        'choices' => [['message' => ['content' => '{"points":8}']]],
+    ], 200)]);
+
+    $out = app(GroqDriver::class)->complete('SYS', [['role' => 'user', 'content' => 'q']], 400, true);
+
+    expect($out)->toBe('{"points":8}');
+    Http::assertSent(fn ($r) => ($r['response_format']['type'] ?? null) === 'json_object' && ! isset($r['stream']));
+});
+
 it('streamChat throws when the provider is unconfigured', function () {
     config(['services.ai.groq.api_key' => null]);
     app(GroqDriver::class)->streamChat('s', [], fn () => null);

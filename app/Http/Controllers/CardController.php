@@ -115,6 +115,9 @@ class CardController extends Controller
 
         broadcast(new BoardEvent($boardId, 'card.updated', $payload));
 
+        // If this is a subtask that moved column (into/out of done), refresh its epic's rollup.
+        $this->broadcastEpicRollup($boardId, $card->parent_card_id);
+
         // A changed due date re-arms the reminder so the scheduler can fire again.
         if (array_key_exists('due_date', $validated)) {
             $prev = $existing?->due_date ? $existing->due_date->format('Y-m-d') : null;
@@ -146,8 +149,12 @@ class CardController extends Controller
     public function destroy(int $boardId, int $cardId)
     {
         $this->authorizeWrite($boardId);
-        Card::where('board_id', $boardId)->findOrFail($cardId)->update(['archived_at' => now()]);
+        $card = Card::where('board_id', $boardId)->findOrFail($cardId);
+        $card->update(['archived_at' => now()]);
         broadcast(new BoardEvent($boardId, 'card.deleted', ['id' => $cardId]));
+
+        // Archiving a subtask changes its epic's rollup.
+        $this->broadcastEpicRollup($boardId, $card->parent_card_id);
 
         return response()->json(null, 204);
     }
@@ -274,6 +281,10 @@ class CardController extends Controller
             broadcast(new BoardEvent($boardId, 'cards.reordered', ['cards' => array_values($entries)]));
         }
 
+        // Any moved subtasks may have crossed the done line — refresh their epics' rollups.
+        collect($updatedCards)->pluck('parent_card_id')->filter()->unique()
+            ->each(fn ($epicId) => $this->broadcastEpicRollup($boardId, (int) $epicId));
+
         // Notify each moved card's assignee (unless they did the move) that it
         // changed column / was completed.
         if (! empty($movedCardIds)) {
@@ -317,33 +328,51 @@ class CardController extends Controller
     public function subtasks(int $boardId, int $cardId)
     {
         $this->authorizeBoard($boardId);
+        // Resolve the board prefix once so each subtask row carries its ticket_key
+        // (plus assignee/tags) — the epic list renders them as real cards now.
+        $prefix = Board::whereKey($boardId)->value('ticket_prefix');
 
-        return CardResource::collection(
-            Card::where('board_id', $boardId)
-                ->where('parent_card_id', $cardId)
-                ->whereNull('archived_at')
-                ->orderBy('position')
-                ->get()
-        );
+        $cards = Card::where('board_id', $boardId)
+            ->where('parent_card_id', $cardId)
+            ->whereNull('archived_at')
+            ->with(['assignedUser:id,name', 'createdBy:id,name', 'tags'])
+            ->orderBy('position')
+            ->get();
+
+        return $cards->map(fn (Card $c) => CardResource::withTicketKeyFromPrefix($c, $prefix));
     }
 
     public function storeSubtask(Request $request, int $boardId, int $cardId)
     {
-        $this->authorizeWrite($boardId);
-        $validated = $request->validate(['name' => ['required', 'string', 'max:255']]);
+        $board = $this->authorizeWrite($boardId);
         $parent = $this->boardCard($boardId, $cardId);
-        $position = Card::where('parent_card_id', $parent->id)->max('position') + 1;
-        $subtask = Card::create([
+
+        // Subtasks are one level deep — an epic's child cannot itself be an epic.
+        if ($parent->parent_card_id !== null) {
+            abort(422, 'Subtasks cannot have subtasks.');
+        }
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'assigned_user_id' => ['nullable', 'integer', 'exists:users,id', new AssignableBoardMember($board)],
+            'due_date' => ['nullable', 'date'],
+        ]);
+
+        // Route through the normal create path (ticket number, section-scoped
+        // position, SLA stamp), inheriting the epic's column.
+        $subtask = $this->cardService->create(array_merge($validated, [
             'board_id' => $boardId,
             'section_id' => $parent->section_id,
             'parent_card_id' => $parent->id,
-            'name' => $validated['name'],
-            'description' => '',
-            'position' => $position,
-            'created_by_user_id' => Auth::id(),
-        ]);
+            // Inherit the epic's sprint so scrum boards show the subtask alongside it.
+            'sprint_id' => $parent->sprint_id,
+        ]));
 
-        return (new CardResource($subtask))->response()->setStatusCode(201);
+        $payload = CardResource::withTicketKey($subtask)->resolve();
+        broadcast(new BoardEvent($boardId, 'card.created', $payload));
+        $this->broadcastEpicRollup($boardId, $parent->id);
+
+        return response()->json($payload, 201);
     }
 
     public function updateSubtask(Request $request, int $boardId, int $cardId, int $subtaskId)
@@ -352,7 +381,36 @@ class CardController extends Controller
         $validated = $request->validate(['is_done' => ['required', 'boolean']]);
         $subtask = Card::where('board_id', $boardId)->where('parent_card_id', $cardId)->findOrFail($subtaskId);
         $subtask->update($validated);
+        $this->broadcastEpicRollup($boardId, $cardId);
 
         return new CardResource($subtask);
+    }
+
+    /**
+     * Broadcast the epic's rollup counts so cards showing a subtask progress chip
+     * update live when a child is created, completed (done column), or archived.
+     * Done = the subtask sits in a done-marking column (done_at set); on boards with
+     * no done column, the legacy is_done flag is the fallback signal.
+     */
+    protected function broadcastEpicRollup(int $boardId, ?int $parentId): void
+    {
+        if ($parentId === null) {
+            return;
+        }
+        $parent = Card::where('board_id', $boardId)->find($parentId);
+        if (! $parent) {
+            return;
+        }
+        $parent->loadCount([
+            'subtasks as subtasks_count' => fn ($q) => $q->whereNull('archived_at'),
+            'subtasks as done_subtasks_count' => fn ($q) => $q->whereNull('archived_at')
+                ->where(fn ($w) => $w->whereNotNull('done_at')->orWhere('is_done', true)),
+        ]);
+
+        broadcast(new BoardEvent($boardId, 'card.updated', [
+            'id' => $parent->id,
+            'subtasks_count' => $parent->subtasks_count,
+            'done_subtasks_count' => $parent->done_subtasks_count,
+        ]));
     }
 }

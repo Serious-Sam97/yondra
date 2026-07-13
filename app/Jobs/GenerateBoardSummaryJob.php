@@ -12,23 +12,22 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Runs a streamed card-thread summary off the request thread, so the outbound LLM
- * call never blocks the HTTP response. Board access was checked by the controller
- * before dispatch; only scalar IDs are carried (the house job convention — never an
- * Eloquent model), and the service re-loads the card.
+ * Runs a board-level AI standup / sprint summary off the request thread, streaming
+ * `ai.token`/`ai.done` frames (scope:'board') on the board channel. Board access was
+ * checked by the controller before dispatch; only scalar IDs are carried.
  */
-class GenerateCardSummaryJob implements ShouldQueue
+class GenerateBoardSummaryJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public function __construct(
         public readonly int $boardId,
-        public readonly int $cardId,
         public readonly string $requestId,
+        public readonly ?int $sprintId = null,
     ) {}
 
     public function handle(AiAssistService $ai): void
     {
-        $ai->summarizeCard($this->boardId, $this->cardId, $this->requestId);
+        $ai->streamBoardSummary($this->boardId, $this->requestId, $this->sprintId);
     }
 }

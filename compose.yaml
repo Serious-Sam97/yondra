@@ -59,7 +59,10 @@ services:
                 WWWGROUP: '${WWWGROUP}'
         container_name: yondra-queue
         restart: unless-stopped
-        command: ["php", "artisan", "queue:work", "--tries=3", "--sleep=3"]
+        # queue:listen (not work) reloads the app code per job, so backend changes to
+        # jobs/services take effect without recreating this container. Slightly slower
+        # per job — fine for local dev.
+        command: ["php", "artisan", "queue:listen", "--tries=3"]
         environment:
             WWWUSER: '${WWWUSER}'
             SUPERVISOR_PHP_USER: sail

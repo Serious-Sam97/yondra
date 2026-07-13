@@ -7,11 +7,11 @@ namespace App\Services\Ai;
 use Illuminate\Support\Facades\Http;
 
 /**
- * Shared behaviour for streaming, SSE-based LLM providers. Owns the transport: the
- * `data: {json}` line buffer over a chunked HTTP body, delta assembly, and the
- * configured/HTTP-error guards. A concrete driver only supplies the provider
- * specifics — endpoint, headers, request body, and how to read a text delta out of
- * one decoded frame. Mirrors the WhatsApp CloudApiDriver → MetaCloudDriver shape.
+ * Shared behaviour for HTTP LLM providers. Owns both transports: the streaming SSE
+ * `data: {json}` line buffer (streamChat) and the non-streaming request (complete). A
+ * concrete driver only supplies the provider specifics — endpoint, headers, request
+ * body, and how to read text out of a streamed frame vs a whole response. Mirrors the
+ * WhatsApp CloudApiDriver → MetaCloudDriver shape.
  */
 abstract class SseAiDriver implements AiDriver
 {
@@ -24,7 +24,7 @@ abstract class SseAiDriver implements AiDriver
         $response = Http::withHeaders($this->headers())
             ->timeout(120)
             ->withOptions(['stream' => true])
-            ->post($this->endpoint(), $this->payload($system, $messages, $maxTokens));
+            ->post($this->endpoint(), $this->payload($system, $messages, $maxTokens, true, false));
 
         if (! $response->successful()) {
             throw new \RuntimeException(static::class.' returned HTTP '.$response->status());
@@ -66,7 +66,24 @@ abstract class SseAiDriver implements AiDriver
         return $full;
     }
 
-    /** The streaming completions endpoint URL. */
+    public function complete(string $system, array $messages, int $maxTokens = 1024, bool $json = false): string
+    {
+        if (! $this->isAvailable()) {
+            throw new \RuntimeException(static::class.' is not configured.');
+        }
+
+        $response = Http::withHeaders($this->headers())
+            ->timeout(120)
+            ->post($this->endpoint(), $this->payload($system, $messages, $maxTokens, false, $json));
+
+        if (! $response->successful()) {
+            throw new \RuntimeException(static::class.' returned HTTP '.$response->status());
+        }
+
+        return $this->extractText($response->json() ?? []);
+    }
+
+    /** The completions endpoint URL. */
     abstract protected function endpoint(): string;
 
     /** @return array<string,string> Request headers (auth, content-type, versioning). */
@@ -74,9 +91,10 @@ abstract class SseAiDriver implements AiDriver
 
     /**
      * @param  list<array{role:string,content:string}>  $messages
-     * @return array<string,mixed>  The JSON request body (must request streaming).
+     * @return array<string,mixed>  The JSON request body. $stream requests SSE; $json asks
+     *                              for a JSON object where the provider supports it.
      */
-    abstract protected function payload(string $system, array $messages, int $maxTokens): array;
+    abstract protected function payload(string $system, array $messages, int $maxTokens, bool $stream, bool $json): array;
 
     /**
      * Pull the text delta out of one decoded SSE `data` frame, or null when the frame
@@ -85,4 +103,11 @@ abstract class SseAiDriver implements AiDriver
      * @param  array<string,mixed>  $event
      */
     abstract protected function extractDelta(array $event): ?string;
+
+    /**
+     * Pull the full text out of a non-streaming response body.
+     *
+     * @param  array<string,mixed>  $response
+     */
+    abstract protected function extractText(array $response): string;
 }

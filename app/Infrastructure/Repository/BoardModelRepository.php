@@ -34,12 +34,21 @@ class BoardModelRepository implements BoardRepository
         return ['owned' => $owned->values(), 'shared' => $shared->values()];
     }
 
-    public function show($id)
+    public function show($id, bool $includeSubtasks = false)
     {
         $board = Board::with([
             'sections',
             'sprints',
-            'cards' => fn ($q) => $q->whereNull('archived_at')->whereNull('parent_card_id')->orderBy('position'),
+            // Top-level cards carry subtask rollup counts (epic progress chip). When
+            // $includeSubtasks, child cards load too (for the board "Show subtasks" toggle).
+            'cards' => fn ($q) => $q->whereNull('archived_at')
+                ->when(! $includeSubtasks, fn ($qq) => $qq->whereNull('parent_card_id'))
+                ->withCount([
+                    'subtasks as subtasks_count' => fn ($sq) => $sq->whereNull('archived_at'),
+                    'subtasks as done_subtasks_count' => fn ($sq) => $sq->whereNull('archived_at')
+                        ->where(fn ($w) => $w->whereNotNull('done_at')->orWhere('is_done', true)),
+                ])
+                ->orderBy('position'),
             'cards.assignedUser:id,name',
             'cards.createdBy:id,name',
             'cards.tags',

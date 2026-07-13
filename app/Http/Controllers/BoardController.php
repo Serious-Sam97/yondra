@@ -34,9 +34,11 @@ class BoardController extends Controller
         ];
     }
 
-    public function show(int $boardId)
+    public function show(Request $request, int $boardId)
     {
-        return new BoardResource($this->boardService->fetchOne($boardId));
+        return new BoardResource(
+            $this->boardService->fetchOne($boardId, $request->boolean('include_subtasks'))
+        );
     }
 
     public function destroy(int $boardId)

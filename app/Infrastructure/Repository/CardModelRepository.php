@@ -30,6 +30,9 @@ class CardModelRepository implements CardRepository
             $card = Card::create([
                 'board_id' => $request['board_id'],
                 'section_id' => $request['section_id'],
+                // Subtasks flow through the same create path so they inherit real
+                // ticket numbers, section-scoped positions, and SLA stamping.
+                'parent_card_id' => $request['parent_card_id'] ?? null,
                 'assigned_user_id' => $request['assigned_user_id'] ?? null,
                 'created_by_user_id' => Auth::id(),
                 'name' => $request['name'],

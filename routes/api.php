@@ -149,8 +149,23 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/boards/{boardId}/cards/{cardId}/planning/ping', [PlanningController::class, 'ping']);
     Route::post('/boards/{boardId}/cards/{cardId}/planning/timer', [PlanningController::class, 'timer']);
 
-    // AI assist — streamed card-thread summary (results arrive over the board channel).
-    Route::post('/boards/{boardId}/cards/{cardId}/ai/summarize', [AiAssistController::class, 'summarize']);
+    // AI endpoints — each costs an outbound LLM call, so they carry a tighter per-user
+    // rate limit (throttle:ai) on top of the global api limiter.
+    Route::middleware('throttle:ai')->group(function () {
+        // Streamed card actions (summary, description, checklist, tests, WhatsApp reply,
+        // rewrite). Results arrive over the board channel as ai.token/ai.done frames.
+        Route::post('/boards/{boardId}/cards/{cardId}/ai/{action}', [AiAssistController::class, 'run'])
+            ->whereIn('action', AiAssistController::ACTIONS);
+
+        // Synchronous structured suggestions (JSON). 'points'/'triage' are not in ACTIONS,
+        // so they never match the streaming route above.
+        Route::post('/boards/{boardId}/cards/{cardId}/ai/points', [AiAssistController::class, 'suggestPoints']);
+        Route::post('/boards/{boardId}/cards/{cardId}/ai/triage', [AiAssistController::class, 'suggestTriage']);
+        Route::post('/boards/{boardId}/cards/{cardId}/ai/subtasks', [AiAssistController::class, 'suggestSubtasks']);
+
+        // Board-level standup / sprint summary (streamed over the board channel).
+        Route::post('/boards/{boardId}/ai/standup', [AiAssistController::class, 'standup']);
+    });
 
     // Sentinel (QA) — N test cases per card, each with N runs (reports).
     Route::get('/boards/{boardId}/cards/{cardId}/qa', [QaController::class, 'index']);

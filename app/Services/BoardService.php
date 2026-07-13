@@ -20,9 +20,9 @@ class BoardService
         return $this->boardRepository->index();
     }
 
-    public function fetchOne($id)
+    public function fetchOne($id, bool $includeSubtasks = false)
     {
-        return $this->boardRepository->show($id);
+        return $this->boardRepository->show($id, $includeSubtasks);
     }
 
     public function create(array $data)

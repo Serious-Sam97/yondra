@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Services\Ai;
 
 /**
- * Anthropic (Claude) Messages API driver. Speaks the `/v1/messages` SSE stream and
- * reads text out of `content_block_delta` frames. All provider knowledge lives here;
- * the streaming loop is inherited from SseAiDriver.
+ * Anthropic (Claude) Messages API driver. Speaks the `/v1/messages` API — SSE
+ * `content_block_delta` frames when streaming, a `content` array when not. All provider
+ * knowledge lives here; the transports are inherited from SseAiDriver.
  */
 class AnthropicDriver extends SseAiDriver
 {
@@ -30,15 +30,21 @@ class AnthropicDriver extends SseAiDriver
         ];
     }
 
-    protected function payload(string $system, array $messages, int $maxTokens): array
+    protected function payload(string $system, array $messages, int $maxTokens, bool $stream, bool $json): array
     {
-        return [
+        $payload = [
             'model' => config('services.ai.anthropic.model'),
             'max_tokens' => $maxTokens,
             'system' => $system,
             'messages' => $messages,
-            'stream' => true,
         ];
+        if ($stream) {
+            $payload['stream'] = true;
+        }
+        // Anthropic has no bare "json_object" mode; the prompt requests the exact shape
+        // and the caller parses. $json is intentionally a no-op here.
+
+        return $payload;
     }
 
     protected function extractDelta(array $event): ?string
@@ -49,5 +55,16 @@ class AnthropicDriver extends SseAiDriver
         }
 
         return (string) ($event['delta']['text'] ?? '');
+    }
+
+    protected function extractText(array $response): string
+    {
+        foreach ($response['content'] ?? [] as $block) {
+            if (($block['type'] ?? null) === 'text') {
+                return (string) ($block['text'] ?? '');
+            }
+        }
+
+        return '';
     }
 }

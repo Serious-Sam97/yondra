@@ -12,6 +12,7 @@ namespace App\Services\Ai;
  * no calling code changes.
  *
  *  - AnthropicDriver — Claude Messages API (default)
+ *  - GroqDriver / OllamaDriver — OpenAI-compatible providers
  *
  * The provider is chosen by config('services.ai.driver').
  */
@@ -29,4 +30,14 @@ interface AiDriver
      * @param  callable(string):void  $onDelta  Called once per streamed text chunk.
      */
     public function streamChat(string $system, array $messages, callable $onDelta, int $maxTokens = 700): string;
+
+    /**
+     * Non-streaming completion — for short, structured answers (e.g. a story-point
+     * estimate as JSON). Returns the full response text. When $json is true the provider
+     * is asked to return a JSON object where it supports a native JSON mode; regardless,
+     * callers should still prompt for the exact shape and defensively parse.
+     *
+     * @param  list<array{role:string,content:string}>  $messages
+     */
+    public function complete(string $system, array $messages, int $maxTokens = 1024, bool $json = false): string;
 }
