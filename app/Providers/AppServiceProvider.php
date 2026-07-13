@@ -12,6 +12,10 @@ use App\Infrastructure\Repository\CardModelRepository;
 use App\Infrastructure\Repository\ProjectModelRepository;
 use App\Infrastructure\Repository\SectionModelRepository;
 use App\Infrastructure\Repository\TagModelRepository;
+use App\Services\Ai\AiDriver;
+use App\Services\Ai\AnthropicDriver;
+use App\Services\Ai\GroqDriver;
+use App\Services\Ai\OllamaDriver;
 use App\Services\Whatsapp\BspDriver;
 use App\Services\Whatsapp\MetaCloudDriver;
 use App\Services\Whatsapp\WhatsappDriver;
@@ -44,6 +48,17 @@ class AppServiceProvider extends ServiceProvider
             return config('services.whatsapp.driver') === 'bsp'
                 ? $this->app->make(BspDriver::class)
                 : $this->app->make(MetaCloudDriver::class);
+        });
+
+        // AI provider (config-selected). Everything that talks to an LLM depends on the
+        // AiDriver interface, so swapping providers is: add a driver (extend SseAiDriver),
+        // add a match arm here, flip AI_DRIVER — no usage code changes.
+        $this->app->bind(AiDriver::class, function () {
+            return match (config('services.ai.driver')) {
+                'groq' => $this->app->make(GroqDriver::class),
+                'ollama' => $this->app->make(OllamaDriver::class),
+                default => $this->app->make(AnthropicDriver::class),
+            };
         });
     }
 

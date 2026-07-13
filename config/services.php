@@ -70,6 +70,37 @@ return [
         ],
     ],
 
+    // Card AI assist (streamed thread summaries). Provider-agnostic: usage code depends
+    // on the App\Services\Ai\AiDriver interface and the concrete driver is chosen here by
+    // 'driver'. To add a provider, extend App\Services\Ai\SseAiDriver and map it in
+    // AppServiceProvider — no usage change. With the selected provider unconfigured, the
+    // /ai endpoints answer 503 and the "Summarise" affordance stays hidden.
+    'ai' => [
+        'driver' => env('AI_DRIVER', 'anthropic'),
+        'max_tokens' => (int) env('AI_MAX_TOKENS', 700),
+
+        'anthropic' => [
+            'api_key' => env('ANTHROPIC_API_KEY'),
+            'base_url' => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'),
+            // Summaries are short; Haiku is a cheaper, faster fit — set ANTHROPIC_MODEL to switch.
+            'model' => env('ANTHROPIC_MODEL', 'claude-opus-4-8'),
+            'version' => env('ANTHROPIC_VERSION', '2023-06-01'),
+        ],
+
+        // Groq (groq.com) — OpenAI-compatible chat completions, fast LPU inference.
+        'groq' => [
+            'api_key' => env('GROQ_API_KEY'),
+            'base_url' => env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
+            'model' => env('GROQ_MODEL', 'llama-3.3-70b-versatile'),
+        ],
+
+        // Local Ollama — OpenAI-compatible endpoint; no key needed.
+        'ollama' => [
+            'base_url' => env('OLLAMA_BASE_URL', 'http://localhost:11434/v1'),
+            'model' => env('OLLAMA_MODEL', 'llama3.1'),
+        ],
+    ],
+
     // GIF picker in the comment composer (proxied server-side; no key → hidden).
     'tenor' => [
         'key' => env('TENOR_API_KEY'),

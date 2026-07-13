@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AiAssistController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BoardActivityController;
 use App\Http\Controllers\BoardController;
@@ -147,6 +148,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/boards/{boardId}/cards/{cardId}/planning/apply', [PlanningController::class, 'apply']);
     Route::post('/boards/{boardId}/cards/{cardId}/planning/ping', [PlanningController::class, 'ping']);
     Route::post('/boards/{boardId}/cards/{cardId}/planning/timer', [PlanningController::class, 'timer']);
+
+    // AI assist — streamed card-thread summary (results arrive over the board channel).
+    Route::post('/boards/{boardId}/cards/{cardId}/ai/summarize', [AiAssistController::class, 'summarize']);
 
     // Sentinel (QA) — N test cases per card, each with N runs (reports).
     Route::get('/boards/{boardId}/cards/{cardId}/qa', [QaController::class, 'index']);
