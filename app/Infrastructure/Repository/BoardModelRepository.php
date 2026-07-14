@@ -137,6 +137,9 @@ class BoardModelRepository implements BoardRepository
             'require_optin_before_email' => array_key_exists('require_optin_before_email', $request)
                                 ? $request['require_optin_before_email']
                                 : $board->require_optin_before_email,
+            'roadmap_config' => array_key_exists('roadmap_config', $request)
+                                ? $request['roadmap_config']
+                                : $board->roadmap_config,
             'github_repo' => array_key_exists('github_repo', $request)
                                 ? $request['github_repo']
                                 : $board->github_repo,

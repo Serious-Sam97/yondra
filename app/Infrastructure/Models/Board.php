@@ -16,6 +16,7 @@ class Board extends Model
         'whatsapp_provider', 'whatsapp_phone_number_id', 'whatsapp_waba_id',
         'whatsapp_token', 'whatsapp_app_secret', 'whatsapp_verify_token',
         'intake_token', 'intake_field_map', 'email_spam_safe', 'require_optin_before_email',
+        'roadmap_config',
     ];
 
     protected $casts = [
@@ -28,6 +29,7 @@ class Board extends Model
         'email_spam_safe' => 'boolean',
         'require_optin_before_email' => 'boolean',
         'intake_field_map' => 'array',
+        'roadmap_config' => 'array',
     ];
 
     // Never expose raw secrets to the client; capabilities are surfaced via

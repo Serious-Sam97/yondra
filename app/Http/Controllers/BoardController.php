@@ -106,6 +106,16 @@ class BoardController extends Controller
             // Email deliverability (YON-51/52).
             'email_spam_safe' => ['sometimes', 'boolean'],
             'require_optin_before_email' => ['sometimes', 'boolean'],
+            // Roadmap flowchart (YON-120): positioned step nodes (one per section)
+            // + directed edges. Null clears back to auto-layout.
+            'roadmap_config' => ['sometimes', 'nullable', 'array'],
+            'roadmap_config.nodes' => ['required_with:roadmap_config', 'array'],
+            'roadmap_config.nodes.*.section_id' => ['required', 'integer', Rule::exists('sections', 'id')->where('board_id', $boardId)],
+            'roadmap_config.nodes.*.x' => ['required', 'numeric'],
+            'roadmap_config.nodes.*.y' => ['required', 'numeric'],
+            'roadmap_config.edges' => ['sometimes', 'array'],
+            'roadmap_config.edges.*.from' => ['required', 'integer', Rule::exists('sections', 'id')->where('board_id', $boardId)],
+            'roadmap_config.edges.*.to' => ['required', 'integer', Rule::exists('sections', 'id')->where('board_id', $boardId)],
         ]);
 
         $this->authorizeProject($validated['project_id'] ?? null);
