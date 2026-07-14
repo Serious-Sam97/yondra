@@ -13,3 +13,6 @@ Schedule::command('notifications:due-reminders')->hourly();
 
 // Expired Sanctum tokens are rejected at auth time but linger in the table — sweep daily.
 Schedule::command('sanctum:prune-expired --hours=24')->daily();
+
+// Re-engage idle WhatsApp leads and drop out the unresponsive ones, once a day.
+Schedule::command('whatsapp:reengage')->daily();

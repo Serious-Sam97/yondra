@@ -14,6 +14,7 @@ use App\Http\Controllers\CardImageController;
 use App\Http\Controllers\CardLinkController;
 use App\Http\Controllers\CardTemplateController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EmailAutomationController;
 use App\Http\Controllers\GifController;
 use App\Http\Controllers\GitHubWebhookController;
 use App\Http\Controllers\ImageUploadController;
@@ -30,6 +31,7 @@ use App\Http\Controllers\StepController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\TestPlanController;
 use App\Http\Controllers\WhatsappAutomationController;
+use App\Http\Controllers\WhatsappReengagementController;
 use App\Http\Controllers\WhatsappController;
 use App\Http\Controllers\WhatsappWebhookController;
 use Illuminate\Http\Request;
@@ -126,6 +128,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/boards/{boardId}/whatsapp/automations', [WhatsappAutomationController::class, 'index']);
     Route::put('/boards/{boardId}/whatsapp/automations/{sectionId}', [WhatsappAutomationController::class, 'upsert']);
     Route::delete('/boards/{boardId}/whatsapp/automations/{sectionId}', [WhatsappAutomationController::class, 'destroy']);
+    Route::get('/boards/{boardId}/whatsapp/reengagement', [WhatsappReengagementController::class, 'show']);
+    Route::put('/boards/{boardId}/whatsapp/reengagement', [WhatsappReengagementController::class, 'upsert']);
+
+    // Email stage automations (owner-level board config).
+    Route::get('/boards/{boardId}/email/automations', [EmailAutomationController::class, 'index']);
+    Route::put('/boards/{boardId}/email/automations/{sectionId}', [EmailAutomationController::class, 'upsert']);
+    Route::delete('/boards/{boardId}/email/automations/{sectionId}', [EmailAutomationController::class, 'destroy']);
 
     Route::post('/boards/{boardId}/cards/{cardId}/attachments', [CardImageController::class, 'store']);
     Route::delete('/boards/{boardId}/cards/{cardId}/attachments/{imageId}', [CardImageController::class, 'destroy']);

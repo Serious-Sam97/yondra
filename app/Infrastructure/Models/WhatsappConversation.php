@@ -11,11 +11,14 @@ class WhatsappConversation extends Model
     protected $fillable = [
         'board_id', 'card_id', 'wa_phone', 'contact_name',
         'last_inbound_at', 'service_window_expires_at', 'quality_state',
+        'reengagement_attempts', 'last_reengagement_at',
     ];
 
     protected $casts = [
         'last_inbound_at' => 'datetime',
         'service_window_expires_at' => 'datetime',
+        'reengagement_attempts' => 'integer',
+        'last_reengagement_at' => 'datetime',
     ];
 
     public function board(): BelongsTo

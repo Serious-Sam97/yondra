@@ -52,7 +52,7 @@ class CardModelRepository implements CardRepository
                 $card->tags()->sync($request['tag_ids']);
             }
 
-            return $card->load(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links', 'documents']);
+            return $card->load(['assignedUser:id,name', 'contact', 'createdBy:id,name', 'tags', 'images', 'links', 'documents']);
         });
     }
 
@@ -99,7 +99,7 @@ class CardModelRepository implements CardRepository
         }
 
         // ticket_key is appended by CardResource at the HTTP boundary.
-        return $card->fresh()->load(['assignedUser:id,name', 'createdBy:id,name', 'tags', 'images', 'links', 'documents']);
+        return $card->fresh()->load(['assignedUser:id,name', 'contact', 'createdBy:id,name', 'tags', 'images', 'links', 'documents']);
     }
 
     public function delete($request)

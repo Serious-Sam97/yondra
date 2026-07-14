@@ -1,0 +1,112 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services;
+
+use App\Infrastructure\Models\Card;
+use App\Infrastructure\Models\Contact;
+use App\Infrastructure\Models\EmailStageAutomation;
+use App\Infrastructure\Models\EmailStageSend;
+use App\Mail\StageAutomationMail;
+use Illuminate\Support\Facades\Mail;
+use Throwable;
+
+/**
+ * Stage-triggered client emails (card #53). Sibling of the WhatsApp stage automation
+ * in {@see WhatsappService}: when a card enters a section that has an enabled email
+ * template, render it with the card/contact variables and mail the card's contact.
+ */
+class EmailAutomationService
+{
+    private const CURRENCY_SYMBOLS = [
+        'BRL' => 'R$', 'USD' => '$', 'EUR' => '€', 'GBP' => '£',
+    ];
+
+    /**
+     * Run the configured email automation for a card that just entered a section.
+     * Guardrails: the automation must exist and be active, and the card must carry a
+     * contact with an email — we never invent a recipient.
+     */
+    public function runStageAutomation(int $cardId, int $sectionId): void
+    {
+        $card = Card::with(['board', 'contact', 'section'])->find($cardId);
+        // Ignore if the card moved on again before the job ran.
+        if (! $card || (int) $card->section_id !== $sectionId) {
+            return;
+        }
+
+        $automation = EmailStageAutomation::where('board_id', $card->board_id)
+            ->where('section_id', $sectionId)
+            ->first();
+        if (! $automation || ! $automation->isActive()) {
+            return;
+        }
+
+        $contact = $card->contact;
+        if (! $contact || ! $contact->email) {
+            return;
+        }
+
+        $vars = $this->variables($card, $contact);
+        $subject = $this->interpolate($automation->subject, $vars);
+        $bodyText = $this->interpolate($automation->body, $vars);
+
+        $send = EmailStageSend::create([
+            'card_id' => (int) $card->id,
+            'section_id' => $sectionId,
+            'contact_id' => (int) $contact->id,
+            'email' => $contact->email,
+            'subject' => $subject,
+            'status' => 'sent',
+            'sent_at' => now(),
+        ]);
+
+        try {
+            Mail::to($contact->email)->send(new StageAutomationMail(
+                subjectLine: $subject,
+                eyebrow: $card->section?->name ?? 'Update',
+                // Author writes plain text with {{variables}}; keep it safe + preserve breaks.
+                bodyHtml: nl2br(e($bodyText)),
+            ));
+        } catch (Throwable $e) {
+            $send->update(['status' => 'failed', 'error' => $e->getMessage()]);
+            report($e);
+        }
+    }
+
+    /** Template variables available in a stage email's subject and body. */
+    private function variables(Card $card, Contact $contact): array
+    {
+        $board = $card->board;
+        $value = $card->value;
+
+        return [
+            'contact_name' => $contact->name ?: 'there',
+            'contact_email' => (string) ($contact->email ?? ''),
+            'card_name' => (string) ($card->name ?? ''),
+            'ticket_key' => Card::ticketKey($board?->ticket_prefix, $card->ticket_number),
+            'stage' => (string) ($card->section?->name ?? ''),
+            'deal_value' => $value !== null ? $this->formatMoney($value, $board?->currency ?? 'BRL') : '',
+            // The "urgency trigger": the card's due date, if the deal has one.
+            'deadline' => $card->due_date ? $card->due_date->format('F j, Y') : '',
+        ];
+    }
+
+    /** Replace {{ var }} tokens; unknown tokens collapse to empty string. */
+    private function interpolate(string $template, array $vars): string
+    {
+        return preg_replace_callback(
+            '/\{\{\s*(\w+)\s*\}\}/',
+            fn (array $m): string => (string) ($vars[$m[1]] ?? ''),
+            $template,
+        ) ?? $template;
+    }
+
+    private function formatMoney(mixed $value, string $currency): string
+    {
+        $symbol = self::CURRENCY_SYMBOLS[$currency] ?? ($currency.' ');
+
+        return $symbol.number_format((float) $value, 2);
+    }
+}

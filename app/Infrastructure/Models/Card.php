@@ -2,6 +2,7 @@
 
 namespace App\Infrastructure\Models;
 
+use App\Jobs\SendStageEmailJob;
 use App\Jobs\SendStageWhatsappJob;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +18,7 @@ class Card extends Model
         static::updated(function (Card $card): void {
             if ($card->wasChanged('section_id')) {
                 SendStageWhatsappJob::dispatch((int) $card->id, (int) $card->section_id);
+                SendStageEmailJob::dispatch((int) $card->id, (int) $card->section_id);
             }
         });
     }
@@ -32,7 +34,7 @@ class Card extends Model
     }
 
     protected $fillable = [
-        'board_id', 'section_id', 'assigned_user_id', 'created_by_user_id',
+        'board_id', 'section_id', 'assigned_user_id', 'contact_id', 'created_by_user_id',
         'name', 'description', 'due_date', 'due_reminder_sent_at', 'priority', 'position', 'archived_at', 'done_at',
         'parent_card_id', 'is_done', 'ticket_number',
         'value', 'story_points', 'sprint_id', 'section_entered_at',
@@ -62,6 +64,11 @@ class Card extends Model
     public function assignedUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_user_id');
+    }
+
+    public function contact(): BelongsTo
+    {
+        return $this->belongsTo(Contact::class);
     }
 
     public function sprint(): BelongsTo

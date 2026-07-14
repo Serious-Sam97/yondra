@@ -50,6 +50,7 @@ class BoardModelRepository implements BoardRepository
                 ])
                 ->orderBy('position'),
             'cards.assignedUser:id,name',
+            'cards.contact',
             'cards.createdBy:id,name',
             'cards.tags',
             'cards.checklistItems',

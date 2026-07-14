@@ -8,6 +8,7 @@ use App\Domain\Repository\SectionRepository;
 use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\Section;
+use App\Infrastructure\Models\WhatsappReengagementPolicy;
 use Illuminate\Support\Facades\DB;
 
 class SectionModelRepository implements SectionRepository
@@ -49,6 +50,9 @@ class SectionModelRepository implements SectionRepository
             Board::where('id', $section->board_id)
                 ->where('done_section_id', $section->id)
                 ->update(['done_section_id' => null]);
+            // Same for the re-engagement policy's Lost stage (also no DB FK).
+            WhatsappReengagementPolicy::where('lost_section_id', $section->id)
+                ->update(['lost_section_id' => null]);
             // Archive the section's cards instead of hard-deleting them — card destroy()
             // archives with a restore endpoint, and section delete must not be the one
             // irreversible path. Cards are detached from the dead section (NULL) so

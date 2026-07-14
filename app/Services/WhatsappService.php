@@ -82,6 +82,9 @@ class WhatsappService
         // Refresh the 24h customer-service window on every inbound message.
         $conversation->last_inbound_at = now();
         $conversation->service_window_expires_at = now()->addDay();
+        // A reply re-arms the re-engagement ladder from zero.
+        $conversation->reengagement_attempts = 0;
+        $conversation->last_reengagement_at = null;
         $conversation->save();
 
         $stored = WhatsappMessage::create([

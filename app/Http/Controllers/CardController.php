@@ -7,6 +7,7 @@ use App\Http\Resources\CardResource;
 use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\BoardActivity;
 use App\Infrastructure\Models\Card;
+use App\Infrastructure\Models\Contact;
 use App\Infrastructure\Models\Section;
 use App\Infrastructure\Models\TestCase;
 use App\Infrastructure\Models\User;
@@ -49,9 +50,15 @@ class CardController extends Controller
             'value' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'story_points' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'sprint_id' => ['sometimes', 'nullable', 'integer', Rule::exists('sprints', 'id')->where('board_id', $boardId)],
+            'contact' => ['sometimes', 'nullable', 'array'],
+            'contact.name' => ['nullable', 'string', 'max:255'],
+            'contact.email' => ['nullable', 'email', 'max:255'],
+            'contact.phone' => ['nullable', 'string', 'max:50'],
         ]);
 
         $card = $this->cardService->create(array_merge($validated, ['board_id' => $boardId]));
+        $this->syncCardContact($board, $card, $validated['contact'] ?? null);
+        $card->load('contact');
         $payload = CardResource::withTicketKey($card)->resolve();
 
         BoardActivity::create([
@@ -84,6 +91,10 @@ class CardController extends Controller
             'value' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'story_points' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'sprint_id' => ['sometimes', 'nullable', 'integer', Rule::exists('sprints', 'id')->where('board_id', $boardId)],
+            'contact' => ['sometimes', 'nullable', 'array'],
+            'contact.name' => ['nullable', 'string', 'max:255'],
+            'contact.email' => ['nullable', 'email', 'max:255'],
+            'contact.phone' => ['nullable', 'string', 'max:50'],
         ]);
 
         // Quality gate guards every path into the done column, not just drag reorder —
@@ -111,6 +122,10 @@ class CardController extends Controller
             'id' => $cardId,
             'board_id' => $boardId,
         ]));
+        if (array_key_exists('contact', $validated)) {
+            $this->syncCardContact($board, $card, $validated['contact']);
+            $card->load('contact');
+        }
         $payload = CardResource::withTicketKey($card)->resolve();
 
         broadcast(new BoardEvent($boardId, 'card.updated', $payload));
@@ -384,6 +399,46 @@ class CardController extends Controller
         $this->broadcastEpicRollup($boardId, $cardId);
 
         return new CardResource($subtask);
+    }
+
+    /**
+     * Upsert and (re)link the card's contact from a nested {name,email,phone} payload.
+     * A card owns at most one contact; editing the fields updates that same contact row.
+     * An all-blank payload detaches (and the orphaned contact is left in place).
+     */
+    protected function syncCardContact(Board $board, Card $card, ?array $contact): void
+    {
+        if ($contact === null) {
+            return;
+        }
+
+        $name = trim((string) ($contact['name'] ?? ''));
+        $email = trim((string) ($contact['email'] ?? ''));
+        $phone = trim((string) ($contact['phone'] ?? ''));
+
+        if ($name === '' && $email === '' && $phone === '') {
+            if ($card->contact_id !== null) {
+                $card->update(['contact_id' => null]);
+            }
+
+            return;
+        }
+
+        // Reuse the linked contact if there is one; otherwise mint a board-scoped one.
+        $model = $card->contact_id
+            ? Contact::where('board_id', $board->id)->find($card->contact_id)
+            : null;
+        $model ??= new Contact(['board_id' => $board->id]);
+
+        $model->board_id = $board->id;
+        $model->name = $name ?: null;
+        $model->email = $email ?: null;
+        $model->phone = $phone ?: null;
+        $model->save();
+
+        if ((int) $card->contact_id !== (int) $model->id) {
+            $card->update(['contact_id' => $model->id]);
+        }
     }
 
     /**
