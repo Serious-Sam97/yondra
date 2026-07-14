@@ -11,6 +11,7 @@ use App\Http\Controllers\CardCommentController;
 use App\Http\Controllers\CardController;
 use App\Http\Controllers\CardDocumentController;
 use App\Http\Controllers\CardImageController;
+use App\Http\Controllers\CardImportController;
 use App\Http\Controllers\CardLinkController;
 use App\Http\Controllers\CardTemplateController;
 use App\Http\Controllers\DashboardController;
@@ -112,6 +113,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/boards/{boardId}/sprints/{sprintId}/report', [SprintController::class, 'report']);
     Route::delete('/boards/{boardId}/sprints/{sprintId}', [SprintController::class, 'destroy']);
     Route::post('/boards/{boardId}/cards', [CardController::class, 'store']);
+    // Bulk create cards from a custom JSON model (YON-121). Sits before the
+    // {cardId} routes so "import" is never captured as a card id.
+    Route::post('/boards/{boardId}/cards/import', [CardImportController::class, 'store']);
     Route::get('/boards/{boardId}/cards/archived', [CardController::class, 'archived']);
     Route::put('/boards/{boardId}/cards/reorder', [CardController::class, 'reorder']);
     Route::put('/boards/{boardId}/cards/{cardId}', [CardController::class, 'update']);
