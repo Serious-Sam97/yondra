@@ -97,6 +97,15 @@ class BoardController extends Controller
             'whatsapp_token' => ['sometimes', 'nullable', 'string', 'max:512'],
             'whatsapp_app_secret' => ['sometimes', 'nullable', 'string', 'max:255'],
             'whatsapp_verify_token' => ['sometimes', 'nullable', 'string', 'max:255'],
+            // Toggle the JotForm intake webhook. Enabling mints a token; disabling clears it.
+            'intake_enabled' => ['sometimes', 'boolean'],
+            // Field mapping rules (YON-50): [{source, target}, …].
+            'intake_field_map' => ['sometimes', 'nullable', 'array'],
+            'intake_field_map.*.source' => ['required_with:intake_field_map', 'string', 'max:120'],
+            'intake_field_map.*.target' => ['required_with:intake_field_map', 'string', 'in:title,description,value,tags,priority,story_points,due_date,contact_name,contact_email,contact_phone,ignore'],
+            // Email deliverability (YON-51/52).
+            'email_spam_safe' => ['sometimes', 'boolean'],
+            'require_optin_before_email' => ['sometimes', 'boolean'],
         ]);
 
         $this->authorizeProject($validated['project_id'] ?? null);

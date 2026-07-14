@@ -42,6 +42,7 @@ class BoardSummaryResource extends JsonResource
         if ($this->withConnectionFlags) {
             $data['github_connected'] = filled($board->github_token);
             $data['whatsapp_connected'] = filled($board->whatsapp_token);
+            $data['intake_connected'] = filled($board->intake_token);
         }
 
         return $data;

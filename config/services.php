@@ -41,6 +41,13 @@ return [
         'token' => env('GITHUB_TOKEN'),
     ],
 
+    'jotform' => [
+        // API key used to download files a client attached to an intake form
+        // submission (JotForm upload URLs are gated behind ?apiKey=…). Unset =>
+        // the intake webhook still creates the card, it just can't pull the files.
+        'api_key' => env('JOTFORM_API_KEY'),
+    ],
+
     'whatsapp' => [
         // Driver used when a board doesn't pin its own provider: 'meta' | 'bsp'.
         'driver' => env('WHATSAPP_DRIVER', 'meta'),

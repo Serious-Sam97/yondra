@@ -9,6 +9,7 @@ use App\Infrastructure\Models\Contact;
 use App\Infrastructure\Models\EmailStageAutomation;
 use App\Infrastructure\Models\EmailStageSend;
 use App\Mail\StageAutomationMail;
+use App\Services\Email\SpamSafeFormatter;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
 
@@ -48,9 +49,34 @@ class EmailAutomationService
             return;
         }
 
+        // Opt-in gate (YON-52): when the board requires confirmation, hold the quote
+        // until the contact has clicked the opt-in link — otherwise it just feeds spam.
+        if (($card->board?->require_optin_before_email ?? false) && ! $contact->isConfirmed()) {
+            EmailStageSend::create([
+                'card_id' => (int) $card->id,
+                'section_id' => $sectionId,
+                'contact_id' => (int) $contact->id,
+                'email' => $contact->email,
+                'subject' => $automation->subject,
+                'status' => 'skipped',
+                'error' => 'Contact has not confirmed opt-in.',
+            ]);
+
+            return;
+        }
+
         $vars = $this->variables($card, $contact);
         $subject = $this->interpolate($automation->subject, $vars);
         $bodyText = $this->interpolate($automation->body, $vars);
+
+        // Deliverability pass (YON-51): strip currency symbols / soften quote keywords
+        // that push the email into Gmail spam. Board-toggled, on by default.
+        if ($card->board?->email_spam_safe ?? true) {
+            $formatter = new SpamSafeFormatter;
+            $currency = $card->board?->currency ?? 'BRL';
+            $subject = $formatter->naturalize($subject, $currency);
+            $bodyText = $formatter->naturalize($bodyText, $currency);
+        }
 
         $send = EmailStageSend::create([
             'card_id' => (int) $card->id,

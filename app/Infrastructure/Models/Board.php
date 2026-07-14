@@ -15,6 +15,7 @@ class Board extends Model
         'github_repo', 'github_token', 'github_webhook_secret',
         'whatsapp_provider', 'whatsapp_phone_number_id', 'whatsapp_waba_id',
         'whatsapp_token', 'whatsapp_app_secret', 'whatsapp_verify_token',
+        'intake_token', 'intake_field_map', 'email_spam_safe', 'require_optin_before_email',
     ];
 
     protected $casts = [
@@ -24,6 +25,9 @@ class Board extends Model
         'whatsapp_app_secret' => 'encrypted',
         'done_section_id' => 'integer',
         'qa_enabled' => 'boolean',
+        'email_spam_safe' => 'boolean',
+        'require_optin_before_email' => 'boolean',
+        'intake_field_map' => 'array',
     ];
 
     // Never expose raw secrets to the client; capabilities are surfaced via

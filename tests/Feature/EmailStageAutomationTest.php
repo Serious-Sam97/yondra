@@ -45,11 +45,61 @@ it('sends the stage email to the card contact when the card enters a configured 
     Mail::assertSent(StageAutomationMail::class, function (StageAutomationMail $mail) {
         return $mail->hasTo('ada@client.com')
             && $mail->subjectLine === 'Hi Ada — Follow-up'
-            && str_contains($mail->bodyHtml, 'R$12,000.50')
+            // Spam-safe is on by default: the currency symbol is naturalized away.
+            && str_contains($mail->bodyHtml, '12,000.50 reais')
+            && ! str_contains($mail->bodyHtml, 'R$')
             && str_contains($mail->bodyHtml, 'August 1, 2026');
     });
 
     expect(EmailStageSend::where('card_id', $card->id)->where('status', 'sent')->count())->toBe(1);
+});
+
+it('softens quote trigger words in the sent body when spam-safe is on', function () {
+    Mail::fake();
+    $user = User::factory()->create();
+    [$board, $from, $to] = crmBoardWithStages($user);
+
+    EmailStageAutomation::create([
+        'board_id' => $board->id, 'section_id' => $to->id,
+        'subject' => 'Seu orçamento',
+        'body' => 'Segue o orçamento no valor de {{deal_value}}.',
+        'enabled' => true,
+    ]);
+    $contact = Contact::create(['board_id' => $board->id, 'name' => 'Ada', 'email' => 'ada@client.com']);
+    $card = Card::create([
+        'board_id' => $board->id, 'section_id' => $from->id, 'name' => 'Deal', 'description' => '',
+        'contact_id' => $contact->id, 'value' => 2000,
+    ]);
+
+    $this->actingAs($user)->putJson("/api/boards/{$board->id}/cards/{$card->id}", ['section_id' => $to->id])->assertOk();
+
+    Mail::assertSent(StageAutomationMail::class, function (StageAutomationMail $mail) {
+        return $mail->subjectLine === 'Seu proposta'
+            && str_contains($mail->bodyHtml, 'proposta')
+            && ! str_contains(mb_strtolower($mail->bodyHtml), 'orçamento')
+            && ! str_contains($mail->bodyHtml, 'R$');
+    });
+});
+
+it('keeps the raw currency symbol when spam-safe is turned off', function () {
+    Mail::fake();
+    $user = User::factory()->create();
+    [$board, $from, $to] = crmBoardWithStages($user);
+    $board->update(['email_spam_safe' => false]);
+
+    EmailStageAutomation::create([
+        'board_id' => $board->id, 'section_id' => $to->id,
+        'subject' => 'Deal', 'body' => 'Worth {{deal_value}}.', 'enabled' => true,
+    ]);
+    $contact = Contact::create(['board_id' => $board->id, 'name' => 'Ada', 'email' => 'ada@client.com']);
+    $card = Card::create([
+        'board_id' => $board->id, 'section_id' => $from->id, 'name' => 'Deal', 'description' => '',
+        'contact_id' => $contact->id, 'value' => 12000.50,
+    ]);
+
+    $this->actingAs($user)->putJson("/api/boards/{$board->id}/cards/{$card->id}", ['section_id' => $to->id])->assertOk();
+
+    Mail::assertSent(StageAutomationMail::class, fn (StageAutomationMail $mail) => str_contains($mail->bodyHtml, 'R$12,000.50'));
 });
 
 it('does not send when the automation is disabled', function () {

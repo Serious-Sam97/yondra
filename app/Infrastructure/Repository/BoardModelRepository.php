@@ -128,6 +128,15 @@ class BoardModelRepository implements BoardRepository
                                 ? $request['background']
                                 : $board->background,
             'default_permission' => $request['default_permission'] ?? $board->default_permission,
+            'intake_field_map' => array_key_exists('intake_field_map', $request)
+                                ? $request['intake_field_map']
+                                : $board->intake_field_map,
+            'email_spam_safe' => array_key_exists('email_spam_safe', $request)
+                                ? $request['email_spam_safe']
+                                : $board->email_spam_safe,
+            'require_optin_before_email' => array_key_exists('require_optin_before_email', $request)
+                                ? $request['require_optin_before_email']
+                                : $board->require_optin_before_email,
             'github_repo' => array_key_exists('github_repo', $request)
                                 ? $request['github_repo']
                                 : $board->github_repo,
@@ -166,6 +175,15 @@ class BoardModelRepository implements BoardRepository
         // On first connect, auto-issue a verify token if the manager didn't set one.
         if ($board->whatsapp_token && ! $board->whatsapp_verify_token) {
             $board->whatsapp_verify_token = bin2hex(random_bytes(16));
+        }
+
+        // Intake webhook: enabling mints an unguessable token (once), disabling clears it.
+        if (array_key_exists('intake_enabled', $request)) {
+            if ($request['intake_enabled']) {
+                $board->intake_token = $board->intake_token ?: bin2hex(random_bytes(24));
+            } else {
+                $board->intake_token = null;
+            }
         }
         $board->save();
 

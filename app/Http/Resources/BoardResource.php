@@ -44,9 +44,13 @@ class BoardResource extends JsonResource
         $data['can_manage'] = $canManage;
         $data['github_connected'] = filled($board->github_token);
         $data['whatsapp_connected'] = filled($board->whatsapp_token);
+        $data['intake_connected'] = filled($board->intake_token);
         if (! $canManage) {
             $data['github_webhook_secret'] = null;
             $data['whatsapp_verify_token'] = null;
+            // The intake token is a live credential (embedded in the webhook URL);
+            // only managers configuring the integration ever see it.
+            $data['intake_token'] = null;
         }
 
         if ($board->relationLoaded('cards')) {

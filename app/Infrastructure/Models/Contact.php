@@ -8,7 +8,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Contact extends Model
 {
-    protected $fillable = ['board_id', 'name', 'email', 'phone'];
+    protected $fillable = ['board_id', 'name', 'email', 'phone', 'confirm_token', 'confirmed_at'];
+
+    protected $casts = ['confirmed_at' => 'datetime'];
+
+    /** Has this contact clicked the opt-in link (whitelisting our sender)? */
+    public function isConfirmed(): bool
+    {
+        return $this->confirmed_at !== null;
+    }
 
     public function board(): BelongsTo
     {

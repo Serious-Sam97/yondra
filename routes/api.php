@@ -18,6 +18,8 @@ use App\Http\Controllers\EmailAutomationController;
 use App\Http\Controllers\GifController;
 use App\Http\Controllers\GitHubWebhookController;
 use App\Http\Controllers\ImageUploadController;
+use App\Http\Controllers\IntakeConfirmationController;
+use App\Http\Controllers\IntakeWebhookController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NotificationPreferenceController;
 use App\Http\Controllers\PlanningController;
@@ -31,8 +33,8 @@ use App\Http\Controllers\StepController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\TestPlanController;
 use App\Http\Controllers\WhatsappAutomationController;
-use App\Http\Controllers\WhatsappReengagementController;
 use App\Http\Controllers\WhatsappController;
+use App\Http\Controllers\WhatsappReengagementController;
 use App\Http\Controllers\WhatsappWebhookController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Broadcast;
@@ -58,6 +60,17 @@ Route::post('/webhooks/whatsapp/{boardId}', [WhatsappWebhookController::class, '
 
 // Inbound Sentinel CI results — public, authenticated by the case's unguessable ci_token.
 Route::post('/webhooks/qa-ci/{token}', [QaController::class, 'ciHook']);
+
+// Inbound form intake (JotForm → auto-create card) — public, authenticated by the
+// board's unguessable intake_token. Throttled: a form endpoint is a spam target.
+Route::post('/webhooks/intake/{token}', [IntakeWebhookController::class, 'handle'])->middleware('throttle:60,1');
+
+// Public opt-in confirmation landing (YON-52) — a form submitter clicks this from
+// the confirmation email; the unguessable contact token is the credential. GET so
+// it opens in a browser; returns an HTML page, not JSON.
+Route::get('/webhooks/intake/confirm/{token}', [IntakeConfirmationController::class, 'confirm'])
+    ->name('intake.confirm')
+    ->middleware('throttle:60,1');
 
 // Private image streaming — signature-gated instead of Sanctum because the
 // frontend consumes these as plain <img src> URLs (no Bearer header possible).
