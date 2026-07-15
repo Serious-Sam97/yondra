@@ -101,6 +101,53 @@ class EmailAutomationService
         }
     }
 
+    /**
+     * Send an ad-hoc templated email to a card's contact, reusing the stage-email
+     * variables, opt-in gate, and spam-safe pass. Returns
+     * ['status' => sent|failed|skipped, 'error' => ?string]. No EmailStageSend row is
+     * written — the caller owns its own audit trail (payment milestones use their
+     * event log). Used by the payment milestone engine (YON-63).
+     *
+     * @param  array<string,string>  $extraVars
+     */
+    public function sendToCard(Card $card, string $subject, string $body, array $extraVars = [], ?string $eyebrow = null): array
+    {
+        $card->loadMissing(['board', 'contact', 'section']);
+        $contact = $card->contact;
+        if (! $contact || ! $contact->email) {
+            return ['status' => 'skipped', 'error' => 'Card has no contact email.'];
+        }
+
+        if (($card->board?->require_optin_before_email ?? false) && ! $contact->isConfirmed()) {
+            return ['status' => 'skipped', 'error' => 'Contact has not confirmed opt-in.'];
+        }
+
+        $vars = array_merge($this->variables($card, $contact), $extraVars);
+        $subjectOut = $this->interpolate($subject, $vars);
+        $bodyOut = $this->interpolate($body, $vars);
+
+        if ($card->board?->email_spam_safe ?? true) {
+            $formatter = new SpamSafeFormatter;
+            $currency = $card->board?->currency ?? 'BRL';
+            $subjectOut = $formatter->naturalize($subjectOut, $currency);
+            $bodyOut = $formatter->naturalize($bodyOut, $currency);
+        }
+
+        try {
+            Mail::to($contact->email)->send(new StageAutomationMail(
+                subjectLine: $subjectOut,
+                eyebrow: $eyebrow ?? ($card->section?->name ?? 'Update'),
+                bodyHtml: nl2br(e($bodyOut)),
+            ));
+
+            return ['status' => 'sent', 'error' => null];
+        } catch (Throwable $e) {
+            report($e);
+
+            return ['status' => 'failed', 'error' => $e->getMessage()];
+        }
+    }
+
     /** Template variables available in a stage email's subject and body. */
     private function variables(Card $card, Contact $contact): array
     {

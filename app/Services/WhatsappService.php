@@ -238,6 +238,33 @@ class WhatsappService
     }
 
     /**
+     * Non-throwing template send for automation engines (YON-63 payment milestones).
+     * Applies the same guardrails as {@see runStageAutomation} — a conversation must
+     * exist and the number's quality must be healthy — and never throws; returns
+     * ['status' => sent|failed|skipped, 'error' => ?string].
+     */
+    public function tryTemplateToCard(Card $card, string $template, string $language): array
+    {
+        $conversation = $card->whatsappConversations()->first();
+        if (! $conversation) {
+            return ['status' => 'skipped', 'error' => 'Card has no WhatsApp conversation yet.'];
+        }
+        if (in_array($conversation->quality_state, ['yellow', 'red'], true)) {
+            return ['status' => 'skipped', 'error' => 'WhatsApp number quality is degraded.'];
+        }
+
+        try {
+            $message = $this->sendTemplateToCard($card, $template, $language, [], null);
+
+            return ['status' => $message->status === 'failed' ? 'failed' : 'sent', 'error' => $message->error];
+        } catch (\Throwable $e) {
+            report($e);
+
+            return ['status' => 'failed', 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
      * Apply a quality signal to a board: stamp its conversations and, on a
      * yellow/red drop, pause every stage automation so we stop sending until a human
      * clears it.

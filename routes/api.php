@@ -13,6 +13,7 @@ use App\Http\Controllers\CardDocumentController;
 use App\Http\Controllers\CardImageController;
 use App\Http\Controllers\CardImportController;
 use App\Http\Controllers\CardLinkController;
+use App\Http\Controllers\CardPaymentController;
 use App\Http\Controllers\CardTemplateController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmailAutomationController;
@@ -23,10 +24,12 @@ use App\Http\Controllers\IntakeConfirmationController;
 use App\Http\Controllers\IntakeWebhookController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NotificationPreferenceController;
+use App\Http\Controllers\PaymentMilestoneController;
 use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectMemberController;
 use App\Http\Controllers\QaController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SectionController;
 use App\Http\Controllers\SprintController;
@@ -91,6 +94,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/user/password', [AuthController::class, 'updatePassword']);
 
     Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/reports/revenue', [ReportController::class, 'revenue']);
     Route::get('/search', [SearchController::class, 'index']);
 
     Route::get('/boards', [BoardController::class, 'index']);
@@ -152,6 +156,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/boards/{boardId}/email/automations', [EmailAutomationController::class, 'index']);
     Route::put('/boards/{boardId}/email/automations/{sectionId}', [EmailAutomationController::class, 'upsert']);
     Route::delete('/boards/{boardId}/email/automations/{sectionId}', [EmailAutomationController::class, 'destroy']);
+
+    // Payment milestones (YON-63) — owner-level board config for the 50%/100% flow.
+    Route::get('/boards/{boardId}/payment-milestones', [PaymentMilestoneController::class, 'index']);
+    Route::post('/boards/{boardId}/payment-milestones', [PaymentMilestoneController::class, 'store']);
+    Route::put('/boards/{boardId}/payment-milestones/{milestoneId}', [PaymentMilestoneController::class, 'update']);
+    Route::delete('/boards/{boardId}/payment-milestones/{milestoneId}', [PaymentMilestoneController::class, 'destroy']);
+
+    // Payment ledger on a CRM deal (YON-63).
+    Route::get('/boards/{boardId}/cards/{cardId}/payments', [CardPaymentController::class, 'index']);
+    Route::post('/boards/{boardId}/cards/{cardId}/payments', [CardPaymentController::class, 'store']);
+    Route::delete('/boards/{boardId}/cards/{cardId}/payments/{paymentId}', [CardPaymentController::class, 'destroy']);
 
     Route::post('/boards/{boardId}/cards/{cardId}/attachments', [CardImageController::class, 'store']);
     Route::delete('/boards/{boardId}/cards/{cardId}/attachments/{imageId}', [CardImageController::class, 'destroy']);

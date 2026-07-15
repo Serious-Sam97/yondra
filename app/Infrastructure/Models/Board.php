@@ -78,6 +78,11 @@ class Board extends Model
         return $this->hasMany(Tag::class);
     }
 
+    public function paymentMilestones(): HasMany
+    {
+        return $this->hasMany(PaymentMilestone::class)->orderBy('threshold_pct');
+    }
+
     public function sharedWith(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'board_shares')->withPivot('permission');

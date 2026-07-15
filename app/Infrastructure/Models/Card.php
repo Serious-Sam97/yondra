@@ -37,7 +37,7 @@ class Card extends Model
         'board_id', 'section_id', 'assigned_user_id', 'contact_id', 'created_by_user_id',
         'name', 'description', 'due_date', 'due_reminder_sent_at', 'priority', 'position', 'archived_at', 'done_at',
         'parent_card_id', 'is_done', 'ticket_number',
-        'value', 'story_points', 'sprint_id', 'section_entered_at',
+        'value', 'amount_paid', 'story_points', 'sprint_id', 'section_entered_at',
     ];
 
     protected $casts = [
@@ -48,6 +48,7 @@ class Card extends Model
         'section_entered_at' => 'datetime',
         'is_done' => 'boolean',
         'value' => 'decimal:2',
+        'amount_paid' => 'decimal:2',
         'story_points' => 'integer',
     ];
 
@@ -114,6 +115,16 @@ class Card extends Model
     public function whatsappConversations(): HasMany
     {
         return $this->hasMany(WhatsappConversation::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(CardPayment::class)->orderByDesc('paid_at')->orderByDesc('id');
+    }
+
+    public function milestoneEvents(): HasMany
+    {
+        return $this->hasMany(PaymentMilestoneEvent::class)->orderBy('threshold_pct');
     }
 
     public function subtasks(): HasMany
