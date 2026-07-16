@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\GenerateAiAssistJob;
 use App\Jobs\GenerateBoardSummaryJob;
+use App\Jobs\GenerateCrmChatJob;
 use App\Services\Ai\AiDriver;
 use App\Services\AiAssistService;
 use Illuminate\Http\Request;
@@ -138,6 +139,39 @@ class AiAssistController extends Controller
         $requestId = $validated['request_id'] ?? (string) Str::uuid();
 
         GenerateBoardSummaryJob::dispatch($boardId, $requestId, $validated['sprint_id'] ?? null);
+
+        return response()->json(['request_id' => $requestId], 202);
+    }
+
+    /**
+     * One turn of the board-level CRM assistant (YON-69) — a multi-turn chat grounded in
+     * the board's current pipeline. Board-scoped and streamed (frames carry
+     * scope:'crm-chat'), so it runs off the request thread like the standup. The full
+     * conversation so far is sent each turn; the model never mutates anything.
+     */
+    public function crmChat(Request $request, AiDriver $ai, int $boardId)
+    {
+        $this->authorizeBoard($boardId);
+
+        if (! $ai->isAvailable()) {
+            abort(503, 'AI assist is not configured.');
+        }
+
+        $validated = $request->validate([
+            'request_id' => ['sometimes', 'string', 'max:64'],
+            'messages' => ['required', 'array', 'min:1', 'max:30'],
+            'messages.*.role' => ['required', 'string', 'in:user,assistant'],
+            'messages.*.content' => ['required', 'string', 'max:4000'],
+        ]);
+        $requestId = $validated['request_id'] ?? (string) Str::uuid();
+
+        // Re-key to a clean list of {role, content} — drop any extra fields the client sent.
+        $messages = array_map(
+            fn (array $m) => ['role' => $m['role'], 'content' => $m['content']],
+            $validated['messages'],
+        );
+
+        GenerateCrmChatJob::dispatch($boardId, $requestId, array_values($messages));
 
         return response()->json(['request_id' => $requestId], 202);
     }

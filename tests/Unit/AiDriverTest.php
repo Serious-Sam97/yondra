@@ -177,19 +177,30 @@ it('streamChat throws on a non-2xx response', function () {
     app(GroqDriver::class)->streamChat('s', [], fn () => null);
 })->throws(RuntimeException::class);
 
-it('the AiDriver binding is selected by config', function () {
-    config(['services.ai.driver' => 'anthropic']);
-    expect(app(AiDriver::class))->toBeInstanceOf(AnthropicDriver::class);
+it('the AiDriver binding builds a FallbackAiDriver from the configured chain', function () {
+    // With no ai_settings row (unit tests have no DB), the resolver falls back to config
+    // defaults: chain = [config('services.ai.driver')], filtered to configured providers.
+    $rebuild = function (string $driver, array $extra) {
+        config(array_merge(['services.ai.driver' => $driver], $extra));
+        app(App\Services\Ai\AiSettingsResolver::class)->flush();
+        app()->forgetInstance(AiDriver::class);
 
-    app()->forgetInstance(AiDriver::class);
-    config(['services.ai.driver' => 'groq']);
-    expect(app(AiDriver::class))->toBeInstanceOf(GroqDriver::class);
+        return app(AiDriver::class);
+    };
 
-    app()->forgetInstance(AiDriver::class);
-    config(['services.ai.driver' => 'ollama']);
-    expect(app(AiDriver::class))->toBeInstanceOf(OllamaDriver::class);
+    $d = $rebuild('anthropic', ['services.ai.anthropic.api_key' => 'sk-test']);
+    expect($d)->toBeInstanceOf(App\Services\Ai\FallbackAiDriver::class)
+        ->and($d->members()[0])->toBeInstanceOf(AnthropicDriver::class);
 
-    app()->forgetInstance(AiDriver::class);
-    config(['services.ai.driver' => 'something-unknown']);
-    expect(app(AiDriver::class))->toBeInstanceOf(AnthropicDriver::class);
+    $d = $rebuild('groq', ['services.ai.groq.api_key' => 'gsk-test']);
+    expect($d->members()[0])->toBeInstanceOf(GroqDriver::class);
+
+    $d = $rebuild('ollama', ['services.ai.ollama.base_url' => 'http://localhost:11434/v1']);
+    expect($d->members()[0])->toBeInstanceOf(OllamaDriver::class);
+
+    // An unconfigured provider is filtered out → empty chain → unavailable, no crash.
+    $d = $rebuild('anthropic', ['services.ai.anthropic.api_key' => null]);
+    expect($d)->toBeInstanceOf(App\Services\Ai\FallbackAiDriver::class)
+        ->and($d->members())->toBe([])
+        ->and($d->isAvailable())->toBeFalse();
 });

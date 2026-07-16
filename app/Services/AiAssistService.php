@@ -281,6 +281,154 @@ class AiAssistService
         return "<board>\n".implode("\n", $lines)."\n</board>";
     }
 
+    /**
+     * Multi-turn CRM assistant (YON-69). Answers a team lead's natural-language questions
+     * about pipeline state — which jobs are approved / in progress / won / lost, their
+     * client, owner, value, and due date — grounded ONLY in a snapshot of the board's
+     * current cards. Board-scoped and streamed, mirroring the standup pipeline, but the
+     * conversation history is carried in and frames ride scope:'crm-chat' so they never
+     * collide with the standup's scope:'board' frames on the same channel.
+     *
+     * @param  list<array{role:string,content:string}>  $messages  Prior turns + the new question.
+     */
+    public function streamCrmChat(int $boardId, string $requestId, array $messages): void
+    {
+        try {
+            $context = $this->crmStateBlock($boardId);
+        } catch (\Throwable $e) {
+            Log::warning('AI CRM chat context failed', ['board' => $boardId, 'error' => $e->getMessage()]);
+            $this->failCrm($boardId, $requestId, 'Could not read the board.');
+
+            return;
+        }
+
+        $system = 'You are a CRM assistant for the person running this pipeline. Answer their questions '
+            .'about the current state of the jobs / deals using ONLY the snapshot below — its stage names are '
+            .'authoritative (a job is "approved", "in progress", "won", "lost", etc. according to the column it '
+            .'sits in; the snapshot marks which columns are the WON and LOST stages). For each job you can report '
+            .'its stage, client, owner, value, amount paid, and due date. If the answer is not in the snapshot, '
+            .'say you don\'t see it rather than guessing — never invent jobs, clients, numbers, or dates. '
+            .self::INJECTION_NOTE.' Keep answers short and factual, naming specific jobs. Output plain text, no preamble.';
+
+        // Ground every turn on the current snapshot by prepending it to the conversation.
+        // (The history itself is trusted operator input; the snapshot is the untrusted-data block.)
+        $grounded = array_merge(
+            [['role' => 'user', 'content' => "Here is the current CRM snapshot.\n\n".$context]],
+            [['role' => 'assistant', 'content' => 'Got it — I have the current pipeline. What would you like to know?']],
+            $messages,
+        );
+
+        try {
+            $full = $this->driver->streamChat(
+                $system,
+                $grounded,
+                fn (string $delta) => broadcast(new BoardEvent($boardId, 'ai.token', [
+                    'scope' => 'crm-chat',
+                    'board_id' => $boardId,
+                    'request_id' => $requestId,
+                    'delta' => $delta,
+                ])),
+                900,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('AI CRM chat failed', ['board' => $boardId, 'error' => $e->getMessage()]);
+            $this->failCrm($boardId, $requestId, 'The answer could not be generated. Try again.');
+
+            return;
+        }
+
+        broadcast(new BoardEvent($boardId, 'ai.done', [
+            'scope' => 'crm-chat',
+            'board_id' => $boardId,
+            'request_id' => $requestId,
+            'text' => $full,
+        ]));
+    }
+
+    private function failCrm(int $boardId, string $requestId, string $message): void
+    {
+        broadcast(new BoardEvent($boardId, 'ai.error', [
+            'scope' => 'crm-chat',
+            'board_id' => $boardId,
+            'request_id' => $requestId,
+            'message' => $message,
+        ]));
+    }
+
+    /**
+     * Board state as a CRM pipeline: cards grouped by column, each column tagged with its
+     * role (WON / LOST / open stage), and each card carrying client, owner, value, amount
+     * paid, due date (with an OVERDUE flag), and won/lost date. This is the untrusted DATA
+     * the CRM assistant reasons over.
+     */
+    private function crmStateBlock(int $boardId): string
+    {
+        $board = Board::findOrFail($boardId);
+        $currency = $board->currency ?: '';
+
+        $sections = Section::where('board_id', $boardId)->orderBy('order')->get(['id', 'name']);
+        $bySection = Card::where('board_id', $boardId)
+            ->whereNull('archived_at')
+            ->whereNull('parent_card_id')
+            ->with(['assignedUser:id,name', 'contact:id,name'])
+            ->get()
+            ->groupBy('section_id');
+
+        $money = function ($amount) use ($currency): string {
+            $n = number_format((float) $amount, 2);
+
+            return $currency === '' ? $n : trim($currency.' '.$n);
+        };
+
+        $today = now()->startOfDay();
+        $lines = [];
+        foreach ($sections as $section) {
+            $role = $board->marksDone($section) ? ' [WON stage]'
+                : ($board->marksLost($section) ? ' [LOST stage]' : '');
+            $cards = $bySection->get($section->id, collect());
+            $lines[] = '## '.$section->name.$role.' ('.$cards->count().')';
+            if ($cards->isEmpty()) {
+                $lines[] = '(none)';
+                $lines[] = '';
+
+                continue;
+            }
+            foreach ($cards as $c) {
+                $bits = [];
+                if ($c->contact) {
+                    $bits[] = 'client '.$c->contact->name;
+                }
+                if ($c->assignedUser) {
+                    $bits[] = 'owner @'.$c->assignedUser->name;
+                }
+                if ($c->value !== null) {
+                    $bits[] = 'value '.$money($c->value);
+                }
+                if ($c->amount_paid !== null && (float) $c->amount_paid > 0) {
+                    $bits[] = 'paid '.$money($c->amount_paid);
+                }
+                if ($c->due_date) {
+                    $overdue = ! ($c->is_done || $c->done_at) && $c->due_date->lt($today);
+                    $bits[] = 'due '.$c->due_date->format('Y-m-d').($overdue ? ' OVERDUE' : '');
+                }
+                if ($c->done_at) {
+                    $bits[] = 'won '.$c->done_at->format('Y-m-d');
+                }
+                if ($c->lost_at) {
+                    $bits[] = 'lost '.$c->lost_at->format('Y-m-d');
+                    if ($c->loss_reason) {
+                        $bits[] = 'reason '.$c->loss_reason;
+                    }
+                }
+                $suffix = $bits === [] ? '' : ' ['.implode(', ', $bits).']';
+                $lines[] = '- '.($c->name ?: '(untitled)').$suffix;
+            }
+            $lines[] = '';
+        }
+
+        return "<crm>\nBoard: ".$board->name."\n".implode("\n", $lines)."\n</crm>";
+    }
+
     /** Fibonacci deck the estimator is allowed to return (matches Planning Poker). */
     private const POINT_SCALE = [1, 2, 3, 5, 8, 13, 21];
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Vortex\AiSettingsController;
 use App\Http\Controllers\Vortex\DatabaseController;
 use App\Http\Controllers\Vortex\EntityController;
 use App\Http\Controllers\Vortex\OverviewController;
@@ -44,3 +45,7 @@ Route::post('/system/cache/clear', [SystemController::class, 'clearCache']);
 Route::get('/system/logs/files', [SystemController::class, 'logFiles']);
 Route::get('/system/logs', [SystemController::class, 'logs']);
 Route::get('/system/storage', [SystemController::class, 'storage']);
+
+Route::get('/ai-settings', [AiSettingsController::class, 'index']);
+Route::put('/ai-settings', [AiSettingsController::class, 'update']);
+Route::post('/ai-settings/health/{driver}', [AiSettingsController::class, 'health']);

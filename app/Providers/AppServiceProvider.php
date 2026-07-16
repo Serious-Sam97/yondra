@@ -13,9 +13,8 @@ use App\Infrastructure\Repository\ProjectModelRepository;
 use App\Infrastructure\Repository\SectionModelRepository;
 use App\Infrastructure\Repository\TagModelRepository;
 use App\Services\Ai\AiDriver;
-use App\Services\Ai\AnthropicDriver;
-use App\Services\Ai\GroqDriver;
-use App\Services\Ai\OllamaDriver;
+use App\Services\Ai\AiSettingsResolver;
+use App\Services\Ai\FallbackAiDriver;
 use App\Services\Whatsapp\BspDriver;
 use App\Services\Whatsapp\MetaCloudDriver;
 use App\Services\Whatsapp\WhatsappDriver;
@@ -50,15 +49,27 @@ class AppServiceProvider extends ServiceProvider
                 : $this->app->make(MetaCloudDriver::class);
         });
 
-        // AI provider (config-selected). Everything that talks to an LLM depends on the
-        // AiDriver interface, so swapping providers is: add a driver (extend SseAiDriver),
-        // add a match arm here, flip AI_DRIVER — no usage code changes.
-        $this->app->bind(AiDriver::class, function () {
-            return match (config('services.ai.driver')) {
-                'groq' => $this->app->make(GroqDriver::class),
-                'ollama' => $this->app->make(OllamaDriver::class),
-                default => $this->app->make(AnthropicDriver::class),
-            };
+        // AI provider chain (runtime, DB-controlled). Everything that talks to an LLM depends
+        // on the AiDriver interface; here we resolve the settings row, re-assert its non-secret
+        // knobs onto config, and build an ordered FallbackAiDriver from the enabled+configured
+        // chain. Kept a `bind` (not singleton) so this re-runs — and re-applies settings — on
+        // every resolution; a Vortex settings change is picked up on the next request/job with
+        // no worker restart. See AiSettingsResolver.
+        $this->app->bind(AiDriver::class, function ($app) {
+            $resolver = $app->make(AiSettingsResolver::class);
+            $settings = $resolver->resolve();
+            $resolver->apply($settings);
+
+            $members = array_map(
+                fn (string $key) => $app->make($resolver->driverClassFor($key)),
+                $resolver->chainKeys($settings),
+            );
+
+            // Load-balance mode adds a per-attempt latency budget; off → plain error failover.
+            $balance = $settings['balance'] ?? ['enabled' => false, 'timeout' => 5];
+            $balanceTimeout = ($balance['enabled'] ?? false) ? (int) $balance['timeout'] : null;
+
+            return new FallbackAiDriver($members, $balanceTimeout);
         });
     }
 

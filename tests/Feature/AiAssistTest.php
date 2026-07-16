@@ -7,8 +7,10 @@ use App\Infrastructure\Models\Section;
 use App\Infrastructure\Models\User;
 use App\Infrastructure\Models\WhatsappConversation;
 use App\Infrastructure\Models\WhatsappMessage;
+use App\Infrastructure\Models\Contact;
 use App\Jobs\GenerateAiAssistJob;
 use App\Jobs\GenerateBoardSummaryJob;
+use App\Jobs\GenerateCrmChatJob;
 use App\Services\AiAssistService;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
@@ -382,6 +384,103 @@ it('standup: feeds the board columns + cards (with flags) to the provider', func
         return str_contains($user, '<board>')
             && str_contains($user, 'To Do')       // column
             && str_contains($user, 'Ship login'); // card
+    });
+});
+
+it('crm-chat: dispatches the chat job with the conversation and returns 202', function () {
+    configureAnthropic();
+    Bus::fake();
+    $owner = User::factory()->create();
+    [$board] = aiCard($owner);
+
+    $this->actingAs($owner)
+        ->postJson("/api/boards/{$board->id}/ai/crm-chat", [
+            'request_id' => 'req-cc',
+            'messages' => [['role' => 'user', 'content' => 'Which jobs are approved?']],
+        ])
+        ->assertStatus(202)
+        ->assertJson(['request_id' => 'req-cc']);
+
+    Bus::assertDispatched(GenerateCrmChatJob::class, fn ($job) => $job->boardId === $board->id
+        && $job->requestId === 'req-cc'
+        && $job->messages === [['role' => 'user', 'content' => 'Which jobs are approved?']]);
+});
+
+it('crm-chat: validates the messages array', function () {
+    configureAnthropic();
+    $owner = User::factory()->create();
+    [$board] = aiCard($owner);
+
+    // Missing messages.
+    $this->actingAs($owner)
+        ->postJson("/api/boards/{$board->id}/ai/crm-chat", [])
+        ->assertStatus(422);
+
+    // Bad role.
+    $this->actingAs($owner)
+        ->postJson("/api/boards/{$board->id}/ai/crm-chat", [
+            'messages' => [['role' => 'system', 'content' => 'hi']],
+        ])
+        ->assertStatus(422);
+});
+
+it('crm-chat: the queued job runs end-to-end and calls the provider', function () {
+    configureAnthropic();
+    Http::fake(['api.anthropic.com/*' => Http::response(aiSse(['It is approved.']), 200)]);
+    $owner = User::factory()->create();
+    [$board] = aiCard($owner);
+
+    $this->actingAs($owner)
+        ->postJson("/api/boards/{$board->id}/ai/crm-chat", [
+            'messages' => [['role' => 'user', 'content' => 'Is the login job approved?']],
+        ])
+        ->assertStatus(202);
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/v1/messages'));
+});
+
+it('crm-chat: 503 when unconfigured, 403 for outsiders', function () {
+    config(['services.ai.driver' => 'anthropic', 'services.ai.anthropic.api_key' => null]);
+    $owner = User::factory()->create();
+    [$board] = aiCard($owner);
+    $body = ['messages' => [['role' => 'user', 'content' => 'hi']]];
+
+    $this->actingAs($owner)->postJson("/api/boards/{$board->id}/ai/crm-chat", $body)->assertStatus(503);
+
+    config(['services.ai.anthropic.api_key' => 'sk-test']);
+    $this->actingAs(User::factory()->create())
+        ->postJson("/api/boards/{$board->id}/ai/crm-chat", $body)
+        ->assertStatus(403);
+});
+
+it('crm-chat: grounds the model in a CRM snapshot with stage roles + client/value', function () {
+    configureAnthropic();
+    Http::fake(['api.anthropic.com/*' => Http::response(aiSse(['ok']), 200)]);
+    $owner = User::factory()->create();
+    [$board, $card] = aiCard($owner); // section "To Do", card "Ship login"
+
+    // Make the board CRM-shaped: a "Won" section that is the done stage, a client on the card.
+    $won = Section::create(['board_id' => $board->id, 'name' => 'Won', 'order' => 1]);
+    $board->update(['done_section_id' => $won->id, 'currency' => 'R$']);
+    $contact = Contact::create(['board_id' => $board->id, 'name' => 'Acme Ltda']);
+    $card->update(['contact_id' => $contact->id, 'value' => 1200]);
+
+    app(AiAssistService::class)->streamCrmChat($board->id, 'req', [
+        ['role' => 'user', 'content' => 'status?'],
+    ]);
+
+    Http::assertSent(function ($request) {
+        // The snapshot rides as the first user turn; the operator's question is last.
+        $messages = $request['messages'];
+        $snapshot = $messages[0]['content'] ?? '';
+        $lastTurn = $messages[count($messages) - 1]['content'] ?? '';
+
+        return str_contains($snapshot, '<crm>')
+            && str_contains($snapshot, 'Won [WON stage]')   // stage role annotation
+            && str_contains($snapshot, 'Ship login')          // the job
+            && str_contains($snapshot, 'client Acme Ltda')    // contact
+            && str_contains($snapshot, 'R$ 1,200.00')         // currency-formatted value
+            && $lastTurn === 'status?';
     });
 });
 

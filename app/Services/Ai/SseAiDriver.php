@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Ai;
 
+use GuzzleHttp\Psr7\Utils;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -22,7 +23,7 @@ abstract class SseAiDriver implements AiDriver
         }
 
         $response = Http::withHeaders($this->headers())
-            ->timeout(120)
+            ->timeout($this->timeout())
             ->withOptions(['stream' => true])
             ->post($this->endpoint(), $this->payload($system, $messages, $maxTokens, true, false));
 
@@ -31,12 +32,33 @@ abstract class SseAiDriver implements AiDriver
         }
 
         $body = $response->toPsrResponse()->getBody();
+
+        // Load-balance mode: bound the time-to-first-token. A non-final provider that is too
+        // slow to START streaming (hung/overloaded) is aborted at the deadline so the caller
+        // (FallbackAiDriver) can try the next one. We only watch until the first token — a
+        // healthy stream that's already flowing must never be cut, however long it runs.
+        $deadline = (int) config('services.ai.attempt_deadline', 0);
+        $resource = $deadline > 0 ? $body->detach() : null;
+        if ($resource !== null) {
+            $body = Utils::streamFor($resource);
+        }
+        $awaitingFirstToken = $resource !== null;
+
         $buffer = '';
         $full = '';
 
         // SSE frames are newline-delimited `data: {json}` lines. Read in chunks, process
         // every complete line, and keep the trailing partial for the next read.
         while (! $body->eof()) {
+            if ($awaitingFirstToken) {
+                $read = [$resource];
+                $write = $except = null;
+                // No byte from the provider within the deadline → give up on it.
+                if (@stream_select($read, $write, $except, $deadline) === 0) {
+                    throw new \RuntimeException(static::class.' did not respond within '.$deadline.'s.');
+                }
+            }
+
             $buffer .= $body->read(8192);
 
             while (($nl = strpos($buffer, "\n")) !== false) {
@@ -59,6 +81,7 @@ abstract class SseAiDriver implements AiDriver
                     continue;
                 }
                 $full .= $delta;
+                $awaitingFirstToken = false; // provider is responding — stop the deadline watch.
                 $onDelta($delta);
             }
         }
@@ -72,8 +95,13 @@ abstract class SseAiDriver implements AiDriver
             throw new \RuntimeException(static::class.' is not configured.');
         }
 
+        // Non-streaming answers are short, so in load-balance mode the whole call is bounded
+        // by the deadline: a provider slower than that fails over to the next.
+        $deadline = (int) config('services.ai.attempt_deadline', 0);
+        $timeout = $deadline > 0 ? $deadline : $this->timeout();
+
         $response = Http::withHeaders($this->headers())
-            ->timeout(120)
+            ->timeout($timeout)
             ->post($this->endpoint(), $this->payload($system, $messages, $maxTokens, false, $json));
 
         if (! $response->successful()) {
@@ -81,6 +109,15 @@ abstract class SseAiDriver implements AiDriver
         }
 
         return $this->extractText($response->json() ?? []);
+    }
+
+    /**
+     * Request timeout in seconds. Generous by default (LLM calls are slow); the health-ping
+     * path lowers it via config('services.ai.timeout') so a dead provider fails fast.
+     */
+    protected function timeout(): int
+    {
+        return (int) config('services.ai.timeout', 120);
     }
 
     /** The completions endpoint URL. */

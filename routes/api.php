@@ -214,6 +214,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Board-level standup / sprint summary (streamed over the board channel).
         Route::post('/boards/{boardId}/ai/standup', [AiAssistController::class, 'standup']);
+
+        // Board-level CRM assistant chat (YON-69) — multi-turn, streamed (scope:'crm-chat').
+        Route::post('/boards/{boardId}/ai/crm-chat', [AiAssistController::class, 'crmChat']);
     });
 
     // Sentinel (QA) — N test cases per card, each with N runs (reports).

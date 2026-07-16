@@ -86,6 +86,14 @@ return [
         'driver' => env('AI_DRIVER', 'anthropic'),
         'max_tokens' => (int) env('AI_MAX_TOKENS', 700),
 
+        // Optional latency load-balancing across the provider chain: give each non-final
+        // provider this many seconds to start responding before falling through to the next.
+        // Off by default (chain fails over only on error). Editable at runtime via Vortex.
+        'balance' => [
+            'enabled' => (bool) env('AI_BALANCE', false),
+            'timeout' => (int) env('AI_BALANCE_TIMEOUT', 5),
+        ],
+
         'anthropic' => [
             'api_key' => env('ANTHROPIC_API_KEY'),
             'base_url' => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'),
