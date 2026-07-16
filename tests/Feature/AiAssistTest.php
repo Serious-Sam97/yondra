@@ -3,14 +3,17 @@
 use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\CardComment;
+use App\Infrastructure\Models\Contact;
+use App\Infrastructure\Models\Project;
 use App\Infrastructure\Models\Section;
+use App\Infrastructure\Models\Tag;
 use App\Infrastructure\Models\User;
 use App\Infrastructure\Models\WhatsappConversation;
 use App\Infrastructure\Models\WhatsappMessage;
-use App\Infrastructure\Models\Contact;
 use App\Jobs\GenerateAiAssistJob;
 use App\Jobs\GenerateBoardSummaryJob;
 use App\Jobs\GenerateCrmChatJob;
+use App\Jobs\GenerateWorkspaceChatJob;
 use App\Services\AiAssistService;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
@@ -234,7 +237,7 @@ it('suggestTriage: validates tags/priority/assignee against the board and drops 
     configureAnthropic();
     $owner = User::factory()->create();
     [$board, $card] = aiCard($owner);
-    $tag = \App\Infrastructure\Models\Tag::create(['board_id' => $board->id, 'name' => 'bug', 'color' => '#f00']);
+    $tag = Tag::create(['board_id' => $board->id, 'name' => 'bug', 'color' => '#f00']);
 
     // Model returns one real tag id, one bogus id, a valid priority, and the owner as assignee.
     Http::fake(['api.anthropic.com/*' => Http::response([
@@ -481,6 +484,81 @@ it('crm-chat: grounds the model in a CRM snapshot with stage roles + client/valu
             && str_contains($snapshot, 'client Acme Ltda')    // contact
             && str_contains($snapshot, 'R$ 1,200.00')         // currency-formatted value
             && $lastTurn === 'status?';
+    });
+});
+
+it('vortex-chat: dispatches the workspace chat job for the caller and returns 202', function () {
+    configureAnthropic();
+    Bus::fake();
+    $owner = User::factory()->create();
+    aiCard($owner);
+
+    $this->actingAs($owner)
+        ->postJson('/api/ai/vortex-chat', [
+            'request_id' => 'req-vx',
+            'messages' => [['role' => 'user', 'content' => "What's overdue?"]],
+        ])
+        ->assertStatus(202)
+        ->assertJson(['request_id' => 'req-vx']);
+
+    Bus::assertDispatched(GenerateWorkspaceChatJob::class, fn ($job) => $job->userId === $owner->id
+        && $job->requestId === 'req-vx'
+        && $job->messages === [['role' => 'user', 'content' => "What's overdue?"]]);
+});
+
+it('vortex-chat: validates messages, 503 when unconfigured, 401 for guests', function () {
+    configureAnthropic();
+    $owner = User::factory()->create();
+
+    // Guests never reach the controller (before any actingAs — it sticks for the test).
+    $this->postJson('/api/ai/vortex-chat', [
+        'messages' => [['role' => 'user', 'content' => 'hi']],
+    ])->assertStatus(401);
+
+    // Missing messages / bad role.
+    $this->actingAs($owner)->postJson('/api/ai/vortex-chat', [])->assertStatus(422);
+    $this->actingAs($owner)->postJson('/api/ai/vortex-chat', [
+        'messages' => [['role' => 'system', 'content' => 'hi']],
+    ])->assertStatus(422);
+
+    config(['services.ai.driver' => 'anthropic', 'services.ai.anthropic.api_key' => null]);
+    $this->actingAs($owner)->postJson('/api/ai/vortex-chat', [
+        'messages' => [['role' => 'user', 'content' => 'hi']],
+    ])->assertStatus(503);
+});
+
+it('vortex-chat: grounds the model in a workspace snapshot scoped to the caller', function () {
+    configureAnthropic();
+    Http::fake(['api.anthropic.com/*' => Http::response(aiSse(['ok']), 200)]);
+    $owner = User::factory()->create();
+    [$board, $card] = aiCard($owner); // board "B", section "To Do", card "Ship login"
+
+    // Group the board under a project and give the card an overdue date.
+    $project = Project::create(['owner_id' => $owner->id, 'name' => 'Skunkworks']);
+    $board->update(['project_id' => $project->id]);
+    $card->update(['due_date' => now()->subDays(2)->toDateString()]);
+
+    // Another user's board must NOT leak into the snapshot.
+    $stranger = User::factory()->create();
+    Board::create(['user_id' => $stranger->id, 'name' => 'Secret Ops', 'description' => '', 'type' => 'kanban']);
+
+    app(AiAssistService::class)->streamWorkspaceChat($owner->id, 'req', [
+        ['role' => 'user', 'content' => 'what is overdue?'],
+    ]);
+
+    Http::assertSent(function ($request) {
+        $messages = $request['messages'];
+        $snapshot = $messages[0]['content'] ?? '';
+        $lastTurn = $messages[count($messages) - 1]['content'] ?? '';
+
+        return str_contains($snapshot, '<workspace>')
+            && str_contains($snapshot, 'Project: Skunkworks')
+            && str_contains($snapshot, 'Board: B [kanban]')
+            && str_contains($snapshot, 'To Do (1)')          // column with live count
+            && str_contains($snapshot, 'Ship login')          // the overdue card…
+            && str_contains($snapshot, 'OVERDUE')             // …flagged as such
+            && ! str_contains($snapshot, 'Secret Ops')        // no cross-user leak
+            && $lastTurn === 'what is overdue?';
     });
 });
 

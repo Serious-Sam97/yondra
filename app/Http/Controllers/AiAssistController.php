@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\GenerateAiAssistJob;
 use App\Jobs\GenerateBoardSummaryJob;
 use App\Jobs\GenerateCrmChatJob;
+use App\Jobs\GenerateWorkspaceChatJob;
 use App\Services\Ai\AiDriver;
 use App\Services\AiAssistService;
 use Illuminate\Http\Request;
@@ -172,6 +173,36 @@ class AiAssistController extends Controller
         );
 
         GenerateCrmChatJob::dispatch($boardId, $requestId, array_values($messages));
+
+        return response()->json(['request_id' => $requestId], 202);
+    }
+
+    /**
+     * One turn of Vortex, the user-scoped workspace assistant (mascot chat). No board in
+     * the URL — the snapshot covers every board the caller can see, and the reply streams
+     * back on their own private channel as scope:'vortex-chat' frames. Same conversation
+     * contract as the CRM chat: the client posts the whole transcript each turn.
+     */
+    public function workspaceChat(Request $request, AiDriver $ai)
+    {
+        if (! $ai->isAvailable()) {
+            abort(503, 'AI assist is not configured.');
+        }
+
+        $validated = $request->validate([
+            'request_id' => ['sometimes', 'string', 'max:64'],
+            'messages' => ['required', 'array', 'min:1', 'max:30'],
+            'messages.*.role' => ['required', 'string', 'in:user,assistant'],
+            'messages.*.content' => ['required', 'string', 'max:4000'],
+        ]);
+        $requestId = $validated['request_id'] ?? (string) Str::uuid();
+
+        $messages = array_map(
+            fn (array $m) => ['role' => $m['role'], 'content' => $m['content']],
+            $validated['messages'],
+        );
+
+        GenerateWorkspaceChatJob::dispatch((int) $request->user()->id, $requestId, array_values($messages));
 
         return response()->json(['request_id' => $requestId], 202);
     }

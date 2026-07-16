@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Events\BoardEvent;
+use App\Events\UserEvent;
 use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\Section;
@@ -427,6 +428,166 @@ class AiAssistService
         }
 
         return "<crm>\nBoard: ".$board->name."\n".implode("\n", $lines)."\n</crm>";
+    }
+
+    /**
+     * One turn of Vortex, the user-scoped workspace assistant. Same shape as the CRM
+     * chat but grounded on a snapshot of EVERY board the user can see (grouped by
+     * project) and streamed as scope:'vortex-chat' frames on the user's own private
+     * channel via {@see UserEvent} — Vortex floats over every page, not one board.
+     *
+     * @param  list<array{role:string,content:string}>  $messages
+     */
+    public function streamWorkspaceChat(int $userId, string $requestId, array $messages): void
+    {
+        try {
+            $context = $this->workspaceStateBlock($userId);
+        } catch (\Throwable $e) {
+            Log::warning('AI workspace chat context failed', ['user' => $userId, 'error' => $e->getMessage()]);
+            $this->failWorkspace($userId, $requestId, 'Could not read your workspace.');
+
+            return;
+        }
+
+        $system = 'You are Vortex — Yondra\'s friendly in-app guide: a cheerful little portal sprite that helps '
+            .'the user find their way around their projects and boards. Answer questions about their workspace '
+            .'using ONLY the snapshot below (projects, boards, columns with card counts, and cards due soon or '
+            .'overdue). If the answer is not in the snapshot, say you can\'t see it from here rather than '
+            .'guessing — never invent projects, boards, cards, or dates. '
+            .self::INJECTION_NOTE.' Stay in character: warm, upbeat, and brief — a sentence or three of plain '
+            .'text, no preamble, no markdown.';
+
+        // Ground every turn on the current snapshot by prepending it to the conversation.
+        // (The history itself is trusted operator input; the snapshot is the untrusted-data block.)
+        $grounded = array_merge(
+            [['role' => 'user', 'content' => "Here is the current workspace snapshot.\n\n".$context]],
+            [['role' => 'assistant', 'content' => 'Got it — I can see your boards. What would you like to know?']],
+            $messages,
+        );
+
+        try {
+            $full = $this->driver->streamChat(
+                $system,
+                $grounded,
+                fn (string $delta) => broadcast(new UserEvent($userId, 'ai.token', [
+                    'scope' => 'vortex-chat',
+                    'request_id' => $requestId,
+                    'delta' => $delta,
+                ])),
+                900,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('AI workspace chat failed', ['user' => $userId, 'error' => $e->getMessage()]);
+            $this->failWorkspace($userId, $requestId, 'The answer could not be generated. Try again.');
+
+            return;
+        }
+
+        broadcast(new UserEvent($userId, 'ai.done', [
+            'scope' => 'vortex-chat',
+            'request_id' => $requestId,
+            'text' => $full,
+        ]));
+    }
+
+    private function failWorkspace(int $userId, string $requestId, string $message): void
+    {
+        broadcast(new UserEvent($userId, 'ai.error', [
+            'scope' => 'vortex-chat',
+            'request_id' => $requestId,
+            'message' => $message,
+        ]));
+    }
+
+    /** How many boards / due-soon cards the workspace snapshot will list before cutting off. */
+    private const WORKSPACE_MAX_BOARDS = 20;
+
+    private const WORKSPACE_MAX_DUE = 10;
+
+    /**
+     * Every non-archived board the user can see (owned / shared onto / project-owner —
+     * same visibility rule as the CRM reports), grouped by project. Per board: the
+     * columns with live card counts, plus the cards that are overdue or due within a
+     * week. Bounded on both axes so a big workspace can't blow the prompt up. This is
+     * the untrusted DATA block Vortex reasons over.
+     */
+    private function workspaceStateBlock(int $userId): string
+    {
+        $boards = Board::whereNull('archived_at')
+            ->where(function ($q) use ($userId) {
+                $q->where('user_id', $userId)
+                    ->orWhereHas('sharedWith', fn ($s) => $s->where('users.id', $userId))
+                    ->orWhereHas('project', fn ($p) => $p
+                        ->where('owner_id', $userId)
+                        ->orWhereHas('members', fn ($m) => $m->where('users.id', $userId)->where('role', 'owner')));
+            })
+            ->with('project:id,name')
+            ->orderBy('project_id')
+            ->orderBy('position')
+            ->limit(self::WORKSPACE_MAX_BOARDS + 1)
+            ->get();
+
+        $truncated = $boards->count() > self::WORKSPACE_MAX_BOARDS;
+        $boards = $boards->take(self::WORKSPACE_MAX_BOARDS);
+
+        $today = now()->startOfDay();
+        $lines = [];
+        $lastProject = false; // sentinel so the first "no project" group still prints a header
+        foreach ($boards as $board) {
+            $projectName = $board->project?->name ?? '(no project)';
+            if ($projectName !== $lastProject) {
+                $lines[] = '# Project: '.$projectName;
+                $lastProject = $projectName;
+            }
+
+            $sections = Section::where('board_id', $board->id)->orderBy('order')->get(['id', 'name']);
+            $counts = Card::where('board_id', $board->id)
+                ->whereNull('archived_at')
+                ->whereNull('parent_card_id')
+                ->selectRaw('section_id, count(*) as n')
+                ->groupBy('section_id')
+                ->pluck('n', 'section_id');
+
+            $cols = $sections->map(function ($s) use ($board, $counts) {
+                $role = $board->marksDone($s) ? ' [WON/DONE]'
+                    : ($board->marksLost($s) ? ' [LOST]' : '');
+
+                return $s->name.' ('.($counts[$s->id] ?? 0).')'.$role;
+            })->implode(', ');
+
+            $lines[] = '## Board: '.$board->name.' ['.$board->type.']';
+            $lines[] = 'Columns: '.($cols !== '' ? $cols : '(none)');
+
+            $due = Card::where('board_id', $board->id)
+                ->whereNull('archived_at')
+                ->whereNull('parent_card_id')
+                ->whereNull('done_at')
+                ->whereNotNull('due_date')
+                ->where('due_date', '<=', now()->addDays(7))
+                ->orderBy('due_date')
+                ->limit(self::WORKSPACE_MAX_DUE)
+                ->get(['name', 'due_date', 'is_done']);
+
+            $dueLines = $due->reject(fn ($c) => (bool) $c->is_done)->map(function ($c) use ($today) {
+                $overdue = $c->due_date->lt($today) ? ' OVERDUE' : '';
+
+                return '- '.($c->name ?: '(untitled)').' — due '.$c->due_date->format('Y-m-d').$overdue;
+            });
+            if ($dueLines->isNotEmpty()) {
+                $lines[] = 'Due soon / overdue:';
+                $lines = array_merge($lines, $dueLines->all());
+            }
+            $lines[] = '';
+        }
+
+        if ($boards->isEmpty()) {
+            $lines[] = '(no boards yet)';
+        }
+        if ($truncated) {
+            $lines[] = '(more boards exist — only the first '.self::WORKSPACE_MAX_BOARDS.' are shown)';
+        }
+
+        return "<workspace>\n".implode("\n", $lines)."\n</workspace>";
     }
 
     /** Fibonacci deck the estimator is allowed to return (matches Planning Poker). */

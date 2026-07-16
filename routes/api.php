@@ -10,9 +10,9 @@ use App\Http\Controllers\CardChecklistController;
 use App\Http\Controllers\CardCommentController;
 use App\Http\Controllers\CardController;
 use App\Http\Controllers\CardDocumentController;
-use App\Http\Controllers\CardInvoiceController;
 use App\Http\Controllers\CardImageController;
 use App\Http\Controllers\CardImportController;
+use App\Http\Controllers\CardInvoiceController;
 use App\Http\Controllers\CardLinkController;
 use App\Http\Controllers\CardPaymentController;
 use App\Http\Controllers\CardTemplateController;
@@ -217,6 +217,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Board-level CRM assistant chat (YON-69) — multi-turn, streamed (scope:'crm-chat').
         Route::post('/boards/{boardId}/ai/crm-chat', [AiAssistController::class, 'crmChat']);
+
+        // Vortex — the user-scoped workspace assistant (mascot chat). Multi-turn, streamed
+        // over the caller's own private channel (scope:'vortex-chat'); no board in the URL.
+        Route::post('/ai/vortex-chat', [AiAssistController::class, 'workspaceChat']);
     });
 
     // Sentinel (QA) — N test cases per card, each with N runs (reports).
