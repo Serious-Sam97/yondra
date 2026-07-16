@@ -15,13 +15,15 @@ class PaymentMilestoneEvent extends Model
 
     protected $fillable = [
         'card_id', 'board_id', 'milestone_id', 'threshold_pct', 'amount_paid_at_trigger',
-        'message_status', 'message_channel', 'error', 'moved_to_section_id', 'triggered_at',
+        'message_status', 'message_channel', 'error', 'moved_to_section_id',
+        'invoice_status', 'invoice_number', 'triggered_at',
     ];
 
     protected $casts = [
         'threshold_pct' => 'integer',
         'amount_paid_at_trigger' => 'decimal:2',
         'moved_to_section_id' => 'integer',
+        'invoice_number' => 'integer',
         'triggered_at' => 'datetime',
     ];
 

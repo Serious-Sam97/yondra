@@ -51,3 +51,54 @@ it('truncates an over-long tag name to the column limit', function () {
     $tag = $this->service->findOrCreateByName($this->board->id, str_repeat('x', 80));
     expect(mb_strlen($tag->name))->toBe(50);
 });
+
+it('marks auto-created and repository tags as custom', function () {
+    $auto = $this->service->findOrCreateByName($this->board->id, 'Design');
+    $created = $this->service->create(['board_id' => $this->board->id, 'name' => 'Urgent', 'color' => '#ff0000']);
+
+    expect($auto->kind)->toBe('custom');
+    expect($created->kind)->toBe('custom');
+});
+
+it('seeds the canonical channel tags for a board', function () {
+    $this->service->seedChannelTags($this->board->id);
+
+    $channels = Tag::where('board_id', $this->board->id)->where('kind', 'channel')->get();
+    expect($channels)->toHaveCount(count(TagService::CHANNEL_TAGS));
+    expect($channels->pluck('name')->all())
+        ->toEqualCanonicalizing(['WhatsApp', 'Email', 'Phone', 'Instagram']);
+    expect($channels->firstWhere('name', 'Email')->color)->toBe('#3b82f6');
+});
+
+it('does not duplicate channel tags when seeded twice', function () {
+    $this->service->seedChannelTags($this->board->id);
+    $this->service->seedChannelTags($this->board->id);
+
+    expect(Tag::where('board_id', $this->board->id)->where('kind', 'channel')->count())
+        ->toBe(count(TagService::CHANNEL_TAGS));
+});
+
+it('locks channel tag names but allows recolouring', function () {
+    $this->service->seedChannelTags($this->board->id);
+    $email = Tag::where('board_id', $this->board->id)->where('name', 'Email')->first();
+
+    $updated = $this->service->edit($this->board->id, $email->id, ['name' => 'Newsletter', 'color' => '#000000']);
+
+    expect($updated->name)->toBe('Email');       // rename ignored
+    expect($updated->color)->toBe('#000000');     // recolour applied
+});
+
+it('refuses to delete a channel tag', function () {
+    $this->service->seedChannelTags($this->board->id);
+    $phone = Tag::where('board_id', $this->board->id)->where('name', 'Phone')->first();
+
+    $this->service->remove($this->board->id, $phone->id);
+})->throws(\Illuminate\Validation\ValidationException::class);
+
+it('still deletes a custom tag', function () {
+    $tag = $this->service->create(['board_id' => $this->board->id, 'name' => 'Temp', 'color' => '#123456']);
+
+    $this->service->remove($this->board->id, $tag->id);
+
+    expect(Tag::find($tag->id))->toBeNull();
+});

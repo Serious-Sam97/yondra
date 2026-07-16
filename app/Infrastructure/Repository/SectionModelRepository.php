@@ -50,6 +50,10 @@ class SectionModelRepository implements SectionRepository
             Board::where('id', $section->board_id)
                 ->where('done_section_id', $section->id)
                 ->update(['done_section_id' => null]);
+            // Same for the board's CRM Lost stage (YON-66, also no DB FK).
+            Board::where('id', $section->board_id)
+                ->where('lost_section_id', $section->id)
+                ->update(['lost_section_id' => null]);
             // Same for the re-engagement policy's Lost stage (also no DB FK).
             WhatsappReengagementPolicy::where('lost_section_id', $section->id)
                 ->update(['lost_section_id' => null]);

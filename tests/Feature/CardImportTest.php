@@ -2,6 +2,8 @@
 
 use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Card;
+use App\Infrastructure\Models\ImportModel;
+use App\Infrastructure\Models\Project;
 use App\Infrastructure\Models\Section;
 use App\Infrastructure\Models\Tag;
 use App\Infrastructure\Models\User;
@@ -153,6 +155,59 @@ it('refuses to import for a non-member', function () {
     $this->actingAs($outsider)
         ->postJson("/api/boards/{$board->id}/cards/import", [['name' => 'X']])
         ->assertForbidden();
+
+    expect(Card::count())->toBe(0);
+});
+
+it('imports through a custom project model via the { model_id, payload } envelope', function () {
+    [$user, $board, $todo, $doing] = importBoard();
+    $project = Project::create(['owner_id' => $user->id, 'name' => 'P', 'description' => '']);
+    $board->update(['project_id' => $project->id]);
+
+    $model = ImportModel::create([
+        'project_id' => $project->id,
+        'name' => 'Zendesk',
+        'mode' => 'many',
+        'item_path' => 'results',
+        'fields' => [
+            ['target' => 'name', 'source' => 'subject'],
+            ['target' => 'priority', 'source' => 'sev', 'transform' => ['type' => 'scale', 'map' => ['3' => 'high']]],
+            ['target' => 'tags', 'source' => 'labels', 'transform' => ['type' => 'split', 'delimiter' => ',']],
+            ['target' => 'column', 'transform' => ['type' => 'const', 'value' => 'In Progress']],
+            ['target' => 'contact_email', 'source' => 'requester.email'],
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->postJson("/api/boards/{$board->id}/cards/import", [
+            'model_id' => $model->id,
+            'payload' => ['results' => [
+                ['subject' => 'Refund', 'sev' => 3, 'labels' => 'vip,billing', 'requester' => ['email' => 'a@b.co']],
+            ]],
+        ])
+        ->assertCreated()
+        ->assertJson(['created_count' => 1, 'error_count' => 0]);
+
+    $card = Card::where('name', 'Refund')->firstOrFail();
+    expect($card->section_id)->toBe($doing->id);   // const column "In Progress"
+    expect($card->priority)->toBe('high');          // scale 3 → high
+    expect($card->tags->pluck('name')->sort()->values()->all())->toBe(['billing', 'vip']);
+    expect($card->load('contact')->contact?->email)->toBe('a@b.co');
+    // Also proves it did NOT default to To Do.
+    expect($card->section_id)->not->toBe($todo->id);
+});
+
+it('rejects an import whose model_id is not in the board’s project', function () {
+    [$user, $board] = importBoard();
+    $project = Project::create(['owner_id' => $user->id, 'name' => 'P', 'description' => '']);
+    $board->update(['project_id' => $project->id]);
+
+    $this->actingAs($user)
+        ->postJson("/api/boards/{$board->id}/cards/import", [
+            'model_id' => 9999,
+            'payload' => ['results' => [['subject' => 'x']]],
+        ])
+        ->assertStatus(422);
 
     expect(Card::count())->toBe(0);
 });

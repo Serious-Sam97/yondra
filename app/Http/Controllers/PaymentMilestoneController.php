@@ -77,6 +77,7 @@ class PaymentMilestoneController extends Controller
                 'nullable', 'integer',
                 Rule::exists('sections', 'id')->where('board_id', $boardId),
             ],
+            'generate_invoice' => ['sometimes', 'boolean'],
             'enabled' => ['sometimes', 'boolean'],
             'position' => ['sometimes', 'integer', 'min:0'],
         ]);

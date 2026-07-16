@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Card extends Model
 {
@@ -36,6 +37,7 @@ class Card extends Model
     protected $fillable = [
         'board_id', 'section_id', 'assigned_user_id', 'contact_id', 'created_by_user_id',
         'name', 'description', 'due_date', 'due_reminder_sent_at', 'priority', 'position', 'archived_at', 'done_at',
+        'lost_at', 'loss_reason',
         'parent_card_id', 'is_done', 'ticket_number',
         'value', 'amount_paid', 'story_points', 'sprint_id', 'section_entered_at',
     ];
@@ -45,6 +47,7 @@ class Card extends Model
         'due_reminder_sent_at' => 'datetime',
         'archived_at' => 'datetime',
         'done_at' => 'datetime',
+        'lost_at' => 'datetime',
         'section_entered_at' => 'datetime',
         'is_done' => 'boolean',
         'value' => 'decimal:2',
@@ -125,6 +128,12 @@ class Card extends Model
     public function milestoneEvents(): HasMany
     {
         return $this->hasMany(PaymentMilestoneEvent::class)->orderBy('threshold_pct');
+    }
+
+    /** The nota fiscal / invoice issued for this deal, if any (YON-68). */
+    public function invoice(): HasOne
+    {
+        return $this->hasOne(CardInvoice::class);
     }
 
     public function subtasks(): HasMany

@@ -20,7 +20,7 @@ class Project extends Model
 
     public function boards(): HasMany
     {
-        return $this->hasMany(Board::class);
+        return $this->hasMany(Board::class)->orderBy('position');
     }
 
     public function members(): BelongsToMany

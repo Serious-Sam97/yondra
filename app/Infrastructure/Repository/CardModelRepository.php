@@ -62,6 +62,8 @@ class CardModelRepository implements CardRepository
 
         $newSectionId = $request['section_id'] ?? $card->section_id;
         $doneAt = $card->done_at;
+        $lostAt = $card->lost_at;
+        $lossReason = $card->loss_reason;
         $sectionEnteredAt = $card->section_entered_at;
         $sectionChanged = isset($request['section_id']) && $request['section_id'] !== $card->section_id;
 
@@ -72,6 +74,15 @@ class CardModelRepository implements CardRepository
                 $doneAt = $doneAt ?? now();
             } else {
                 $doneAt = null;
+            }
+            // Entering the Lost stage stamps lost_at + the chosen reason (YON-66);
+            // leaving it clears both, mirroring how done_at clears when leaving Done.
+            if ($section && $board && $board->marksLost($section)) {
+                $lostAt = $lostAt ?? now();
+                $lossReason = $request['loss_reason'] ?? $lossReason;
+            } else {
+                $lostAt = null;
+                $lossReason = null;
             }
             // Reset the SLA-aging clock: moving stage means the card is fresh again.
             $sectionEnteredAt = now();
@@ -91,6 +102,8 @@ class CardModelRepository implements CardRepository
             'story_points' => array_key_exists('story_points', $request) ? $request['story_points'] : $card->story_points,
             'sprint_id' => array_key_exists('sprint_id', $request) ? $request['sprint_id'] : $card->sprint_id,
             'done_at' => $doneAt,
+            'lost_at' => $lostAt,
+            'loss_reason' => $lossReason,
             'section_entered_at' => $sectionEnteredAt,
         ]);
 

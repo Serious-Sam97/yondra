@@ -60,6 +60,11 @@ class ProjectService
         return $this->repo->setArchived($id, $archived);
     }
 
+    public function reorderBoards(int $projectId, array $boardIds): void
+    {
+        $this->repo->reorderBoards($projectId, $boardIds);
+    }
+
     public function duplicate(int $id, ?string $name, bool $includeBoards, bool $includeCards)
     {
         return $this->repo->duplicate($id, $name, $includeBoards, $includeCards);

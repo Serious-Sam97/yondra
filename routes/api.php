@@ -10,6 +10,7 @@ use App\Http\Controllers\CardChecklistController;
 use App\Http\Controllers\CardCommentController;
 use App\Http\Controllers\CardController;
 use App\Http\Controllers\CardDocumentController;
+use App\Http\Controllers\CardInvoiceController;
 use App\Http\Controllers\CardImageController;
 use App\Http\Controllers\CardImportController;
 use App\Http\Controllers\CardLinkController;
@@ -20,6 +21,7 @@ use App\Http\Controllers\EmailAutomationController;
 use App\Http\Controllers\GifController;
 use App\Http\Controllers\GitHubWebhookController;
 use App\Http\Controllers\ImageUploadController;
+use App\Http\Controllers\ImportModelController;
 use App\Http\Controllers\IntakeConfirmationController;
 use App\Http\Controllers\IntakeWebhookController;
 use App\Http\Controllers\NotificationController;
@@ -95,6 +97,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'index']);
     Route::get('/reports/revenue', [ReportController::class, 'revenue']);
+    Route::get('/reports/conversion', [ReportController::class, 'conversion']);
+    Route::get('/reports/loss', [ReportController::class, 'loss']);
+    Route::get('/reports/deals', [ReportController::class, 'deals']);
     Route::get('/search', [SearchController::class, 'index']);
 
     Route::get('/boards', [BoardController::class, 'index']);
@@ -167,6 +172,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/boards/{boardId}/cards/{cardId}/payments', [CardPaymentController::class, 'index']);
     Route::post('/boards/{boardId}/cards/{cardId}/payments', [CardPaymentController::class, 'store']);
     Route::delete('/boards/{boardId}/cards/{cardId}/payments/{paymentId}', [CardPaymentController::class, 'destroy']);
+
+    // Manually issue / re-issue the deal's nota fiscal invoice (YON-68).
+    Route::post('/boards/{boardId}/cards/{cardId}/invoice', [CardInvoiceController::class, 'store']);
 
     Route::post('/boards/{boardId}/cards/{cardId}/attachments', [CardImageController::class, 'store']);
     Route::delete('/boards/{boardId}/cards/{cardId}/attachments/{imageId}', [CardImageController::class, 'destroy']);
@@ -257,11 +265,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/projects/{projectId}/archive', [ProjectController::class, 'archive']);
     Route::post('/projects/{projectId}/unarchive', [ProjectController::class, 'unarchive']);
     Route::post('/projects/{projectId}/copy', [ProjectController::class, 'copy']);
+    Route::post('/projects/{projectId}/boards/reorder', [ProjectController::class, 'reorderBoards']);
 
     Route::get('/projects/{projectId}/members/candidates', [ProjectMemberController::class, 'candidates']);
     Route::post('/projects/{projectId}/members', [ProjectMemberController::class, 'store']);
     Route::put('/projects/{projectId}/members/{userId}', [ProjectMemberController::class, 'update']);
     Route::delete('/projects/{projectId}/members/{userId}', [ProjectMemberController::class, 'destroy']);
+
+    // Custom JSON import models (YON-122) — project-scoped, reusable by any board.
+    Route::get('/projects/{projectId}/import-models', [ImportModelController::class, 'index']);
+    Route::post('/projects/{projectId}/import-models', [ImportModelController::class, 'store']);
+    Route::put('/projects/{projectId}/import-models/{modelId}', [ImportModelController::class, 'update']);
+    Route::delete('/projects/{projectId}/import-models/{modelId}', [ImportModelController::class, 'destroy']);
 
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::get('/notifications/preferences', [NotificationPreferenceController::class, 'show']);

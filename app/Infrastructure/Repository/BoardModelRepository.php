@@ -10,6 +10,7 @@ use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\Project;
 use App\Infrastructure\Models\Section;
 use App\Infrastructure\Models\Tag;
+use App\Services\TagService;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
@@ -90,13 +91,28 @@ class BoardModelRepository implements BoardRepository
         ]);
 
         // Seed columns that fit the board type. CRM boards start as a sales
-        // funnel; kanban/scrum start with the classic workflow lanes.
+        // funnel (ending in Won + a Lost stage); kanban/scrum start with the
+        // classic workflow lanes.
         $defaultSections = $type === 'crm'
-            ? ['Lead In', 'Contact Made', 'Proposal Made', 'Negotiations Started', 'Won']
+            ? ['Lead In', 'Contact Made', 'Proposal Made', 'Negotiations Started', 'Won', 'Lost']
             : ['To Do', 'In Progress', 'Done'];
         foreach ($defaultSections as $i => $sectionName) {
             Section::create(['board_id' => $board->id, 'name' => $sectionName, 'order' => $i]);
         }
+
+        // CRM boards get a designated Lost stage + an editable default reason list,
+        // so "required loss reason on lost" (YON-66) works out of the box.
+        if ($type === 'crm') {
+            $lostId = Section::where('board_id', $board->id)->where('name', 'Lost')->value('id');
+            $board->update([
+                'lost_section_id' => $lostId,
+                'loss_reasons' => Board::DEFAULT_LOSS_REASONS,
+            ]);
+        }
+
+        // Seed the canonical channel tags (WhatsApp/Email/Phone/Instagram) so
+        // the board's Channel/Custom tag split is populated from day one.
+        resolve(TagService::class)->seedChannelTags($board->id);
 
         return $board->load('sections');
     }
@@ -106,6 +122,15 @@ class BoardModelRepository implements BoardRepository
         $board = Board::findOrFail($request['id']);
         $this->authorizeOwner($board);
 
+        // Moving to a different project appends the board to the end of that
+        // project's ordered board list (YON-125); a project-less board resets to 0.
+        $targetPosition = $board->position;
+        if (array_key_exists('project_id', $request) && $request['project_id'] !== $board->project_id) {
+            $targetPosition = $request['project_id'] === null
+                ? 0
+                : (int) Board::where('project_id', $request['project_id'])->max('position') + 1;
+        }
+
         $board->update([
             'name' => $request['name'] ?? $board->name,
             'type' => $request['type'] ?? $board->type,
@@ -113,6 +138,12 @@ class BoardModelRepository implements BoardRepository
             'done_section_id' => array_key_exists('done_section_id', $request)
                                 ? $request['done_section_id']
                                 : $board->done_section_id,
+            'lost_section_id' => array_key_exists('lost_section_id', $request)
+                                ? $request['lost_section_id']
+                                : $board->lost_section_id,
+            'loss_reasons' => array_key_exists('loss_reasons', $request)
+                                ? $request['loss_reasons']
+                                : $board->loss_reasons,
             'qa_enabled' => array_key_exists('qa_enabled', $request)
                                 ? $request['qa_enabled']
                                 : $board->qa_enabled,
@@ -120,6 +151,7 @@ class BoardModelRepository implements BoardRepository
             'project_id' => array_key_exists('project_id', $request)
                                 ? $request['project_id']
                                 : $board->project_id,
+            'position' => $targetPosition,
             'ticket_prefix' => array_key_exists('ticket_prefix', $request)
                                 ? $request['ticket_prefix']
                                 : $board->ticket_prefix,
@@ -137,6 +169,9 @@ class BoardModelRepository implements BoardRepository
             'require_optin_before_email' => array_key_exists('require_optin_before_email', $request)
                                 ? $request['require_optin_before_email']
                                 : $board->require_optin_before_email,
+            'invoice_issuer' => array_key_exists('invoice_issuer', $request)
+                                ? $request['invoice_issuer']
+                                : $board->invoice_issuer,
             'roadmap_config' => array_key_exists('roadmap_config', $request)
                                 ? $request['roadmap_config']
                                 : $board->roadmap_config,
@@ -230,7 +265,7 @@ class BoardModelRepository implements BoardRepository
 
         $tagMap = [];
         foreach ($source->tags as $tag) {
-            $new = Tag::create(['board_id' => $copy->id, 'name' => $tag->name, 'color' => $tag->color]);
+            $new = Tag::create(['board_id' => $copy->id, 'name' => $tag->name, 'color' => $tag->color, 'kind' => $tag->kind]);
             $tagMap[$tag->id] = $new->id;
         }
 

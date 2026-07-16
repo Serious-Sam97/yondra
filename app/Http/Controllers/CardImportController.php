@@ -8,8 +8,10 @@ use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\BoardActivity;
 use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\Contact;
+use App\Infrastructure\Models\ImportModel;
 use App\Infrastructure\Models\Section;
 use App\Services\CardImport\CardImportParser;
+use App\Services\CardImport\ImportModelMapper;
 use App\Services\CardService;
 use App\Services\TagService;
 use Illuminate\Http\Request;
@@ -29,6 +31,7 @@ class CardImportController extends Controller
 {
     public function __construct(
         private CardImportParser $parser,
+        private ImportModelMapper $modelMapper,
         private CardService $cards,
         private TagService $tags,
     ) {}
@@ -37,7 +40,20 @@ class CardImportController extends Controller
     {
         $board = $this->authorizeWrite($boardId);
 
-        [$rows, $shapeError] = $this->parser->extractRows($request->all());
+        // A custom project model is used via an explicit { model_id, payload }
+        // envelope; without it the body IS the JSON (the built-in flat/canvas
+        // path). Requiring both keys keeps a stray `model_id` inside a flat card
+        // from being mistaken for model mode.
+        if ($request->has('model_id') && $request->has('payload')) {
+            $model = $this->resolveModel($board, (int) $request->input('model_id'));
+            if ($model === null) {
+                return response()->json(['message' => 'Import model not found for this board.'], 422);
+            }
+            [$rows, $shapeError] = $this->modelMapper->apply($model->toArray(), $request->input('payload'));
+        } else {
+            [$rows, $shapeError] = $this->parser->extractRows($request->all());
+        }
+
         if ($shapeError !== null) {
             return response()->json(['message' => $shapeError], 422);
         }
@@ -111,6 +127,20 @@ class CardImportController extends Controller
             'errors' => $errors,
             'error_count' => count($errors),
         ], 201);
+    }
+
+    /**
+     * Load a custom import model, scoped to the board's project so a board can
+     * only apply models from its own project. Returns null when the board has no
+     * project or the id doesn't resolve — surfaced as a whole-payload 422.
+     */
+    private function resolveModel(Board $board, int $modelId): ?ImportModel
+    {
+        if ($board->project_id === null) {
+            return null;
+        }
+
+        return ImportModel::where('project_id', $board->project_id)->find($modelId);
     }
 
     /**

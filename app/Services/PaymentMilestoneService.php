@@ -28,6 +28,7 @@ class PaymentMilestoneService
         private readonly PaymentService $payments,
         private readonly QualityGate $qualityGate,
         private readonly CardService $cards,
+        private readonly InvoiceService $invoices,
     ) {}
 
     public function evaluate(int $cardId): void
@@ -107,6 +108,19 @@ class PaymentMilestoneService
 
         if ($milestone->move_to_section_id) {
             $event->moved_to_section_id = $this->moveCard($card, $board, (int) $milestone->move_to_section_id, $event);
+        }
+
+        // Nota fiscal action (YON-68). Independent of the move so a blocked stage
+        // transition never withholds the client's invoice.
+        if ($milestone->generate_invoice) {
+            try {
+                $invoice = $this->invoices->issueForCard($card->fresh() ?? $card);
+                $event->invoice_status = 'issued';
+                $event->invoice_number = $invoice->number;
+            } catch (\Throwable $e) {
+                $event->invoice_status = 'failed';
+                $event->error = trim(($event->error ? $event->error.' ' : '').'Invoice failed: '.$e->getMessage());
+            }
         }
 
         $event->save();

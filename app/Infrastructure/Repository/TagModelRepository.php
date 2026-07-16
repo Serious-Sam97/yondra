@@ -20,6 +20,9 @@ class TagModelRepository implements TagRepository
             'board_id' => $data['board_id'],
             'name' => $data['name'],
             'color' => $data['color'],
+            // Tags created through the API are always free-form 'custom' labels;
+            // 'channel' tags are seeded, not user-created.
+            'kind' => 'custom',
         ]);
     }
 

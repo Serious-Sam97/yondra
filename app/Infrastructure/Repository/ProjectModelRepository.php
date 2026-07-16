@@ -12,6 +12,7 @@ use App\Infrastructure\Models\Section;
 use App\Infrastructure\Models\Tag;
 use App\Infrastructure\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class ProjectModelRepository implements ProjectRepository
@@ -260,6 +261,23 @@ class ProjectModelRepository implements ProjectRepository
         $project->update(['archived_at' => $archived ? now() : null]);
 
         return $this->show($id);
+    }
+
+    /**
+     * Persist a manual board order within a project. The `where('project_id', …)`
+     * guard means ids belonging to another project are silently ignored, so a
+     * caller can never reassign a board's project through this path.
+     */
+    public function reorderBoards(int $projectId, array $boardIds): void
+    {
+        $project = Project::findOrFail($projectId);
+        $this->authorizeOwner($project);
+
+        DB::transaction(function () use ($projectId, $boardIds) {
+            foreach ($boardIds as $order => $id) {
+                Board::where('project_id', $projectId)->where('id', $id)->update(['position' => $order]);
+            }
+        });
     }
 
     public function duplicate(int $id, ?string $name, bool $includeBoards, bool $includeCards)

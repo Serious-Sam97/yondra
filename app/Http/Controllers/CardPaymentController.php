@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Events\BoardEvent;
+use App\Infrastructure\Models\CardInvoice;
 use App\Infrastructure\Models\CardPayment;
 use App\Infrastructure\Models\PaymentMilestoneEvent;
 use App\Services\PaymentService;
@@ -65,7 +66,7 @@ class CardPaymentController extends Controller
     }
 
     /** Shape the Payments panel payload: headline summary + ledger rows + fired milestones. */
-    private function payload($card): array
+    public function payload($card): array
     {
         $payments = CardPayment::where('card_id', $card->id)
             ->with('recordedBy:id,name')
@@ -90,6 +91,8 @@ class CardPaymentController extends Controller
                 'message_status' => $e->message_status,
                 'message_channel' => $e->message_channel,
                 'moved_to_section_id' => $e->moved_to_section_id,
+                'invoice_status' => $e->invoice_status,
+                'invoice_number' => $e->invoice_number,
                 'error' => $e->error,
                 'triggered_at' => $e->triggered_at?->toIso8601String(),
             ]);
@@ -98,6 +101,24 @@ class CardPaymentController extends Controller
             'summary' => $this->payments->summary($card),
             'payments' => $payments,
             'events' => $events,
+            'invoice' => $this->invoicePayload($card),
+        ];
+    }
+
+    /** The issued nota fiscal for this card, if any (YON-68), with its download handle. */
+    private function invoicePayload($card): ?array
+    {
+        $invoice = CardInvoice::where('card_id', $card->id)->first();
+        if (! $invoice) {
+            return null;
+        }
+
+        return [
+            'number' => $invoice->number,
+            'amount' => (float) $invoice->amount,
+            'currency' => $invoice->currency,
+            'document_id' => $invoice->document_id,
+            'issued_at' => $invoice->issued_at?->toIso8601String(),
         ];
     }
 }

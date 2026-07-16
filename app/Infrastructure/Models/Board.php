@@ -9,14 +9,20 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Board extends Model
 {
+    /** Editable defaults seeded onto new CRM boards (YON-66). */
+    public const DEFAULT_LOSS_REASONS = [
+        'Too expensive', 'Slow response', 'No response', 'Client declined', 'Other',
+    ];
+
     protected $fillable = [
-        'user_id', 'project_id', 'name', 'type', 'currency', 'done_section_id', 'qa_enabled', 'description', 'ticket_prefix',
+        'user_id', 'project_id', 'position', 'name', 'type', 'currency', 'done_section_id', 'qa_enabled', 'description', 'ticket_prefix',
+        'lost_section_id', 'loss_reasons',
         'next_ticket_number', 'background', 'default_permission', 'archived_at',
         'github_repo', 'github_token', 'github_webhook_secret',
         'whatsapp_provider', 'whatsapp_phone_number_id', 'whatsapp_waba_id',
         'whatsapp_token', 'whatsapp_app_secret', 'whatsapp_verify_token',
         'intake_token', 'intake_field_map', 'email_spam_safe', 'require_optin_before_email',
-        'roadmap_config',
+        'roadmap_config', 'invoice_issuer',
     ];
 
     protected $casts = [
@@ -25,11 +31,15 @@ class Board extends Model
         'whatsapp_token' => 'encrypted',
         'whatsapp_app_secret' => 'encrypted',
         'done_section_id' => 'integer',
+        'lost_section_id' => 'integer',
+        'loss_reasons' => 'array',
+        'position' => 'integer',
         'qa_enabled' => 'boolean',
         'email_spam_safe' => 'boolean',
         'require_optin_before_email' => 'boolean',
         'intake_field_map' => 'array',
         'roadmap_config' => 'array',
+        'invoice_issuer' => 'array',
     ];
 
     // Never expose raw secrets to the client; capabilities are surfaced via
@@ -46,6 +56,18 @@ class Board extends Model
         return $this->done_section_id
             ? $section->id === $this->done_section_id
             : strtolower((string) $section->name) === 'done';
+    }
+
+    /**
+     * Does landing a card in this section mark it lost (CRM, YON-66)? Uses the
+     * board's configured Lost stage when set; otherwise falls back to a section
+     * literally named "Lost". Mirrors marksDone for the "won" stage.
+     */
+    public function marksLost(Section $section): bool
+    {
+        return $this->lost_section_id
+            ? $section->id === $this->lost_section_id
+            : strtolower((string) $section->name) === 'lost';
     }
 
     public function owner(): BelongsTo

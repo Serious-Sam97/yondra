@@ -105,6 +105,9 @@ return [
         'ollama' => [
             'base_url' => env('OLLAMA_BASE_URL', 'http://localhost:11434/v1'),
             'model' => env('OLLAMA_MODEL', 'llama3.1'),
+            // Thinking control for reasoning models: 'none' disables the hidden reasoning
+            // pass (much faster); set empty to leave it on.
+            'reasoning_effort' => env('OLLAMA_REASONING_EFFORT', 'none'),
         ],
     ],
 

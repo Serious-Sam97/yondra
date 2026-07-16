@@ -36,7 +36,18 @@ abstract class OpenAiCompatibleDriver extends SseAiDriver
             $payload['response_format'] = ['type' => 'json_object'];
         }
 
-        return $payload;
+        return array_merge($payload, $this->extraPayload());
+    }
+
+    /**
+     * Provider-specific extra body fields (e.g. reasoning controls). Base returns none;
+     * concrete drivers override to inject params their endpoint understands.
+     *
+     * @return array<string, mixed>
+     */
+    protected function extraPayload(): array
+    {
+        return [];
     }
 
     protected function extractDelta(array $event): ?string

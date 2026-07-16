@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\ProjectEvent;
 use App\Services\ProjectService;
 use Illuminate\Http\Request;
 
@@ -64,6 +65,21 @@ class ProjectController extends Controller
     public function unarchive(int $projectId)
     {
         return $this->service->setArchived($projectId, false);
+    }
+
+    // Persist a drag-reordered board list within a project (YON-125). Project
+    // owners only; ids from other projects are ignored by the repository.
+    public function reorderBoards(Request $request, int $projectId)
+    {
+        $validated = $request->validate([
+            'board_ids' => ['required', 'array'],
+            'board_ids.*' => ['integer'],
+        ]);
+
+        $this->service->reorderBoards($projectId, $validated['board_ids']);
+        broadcast(new ProjectEvent($projectId, 'boards.reordered', ['board_ids' => $validated['board_ids']]));
+
+        return response()->json(null, 204);
     }
 
     public function copy(Request $request, int $projectId)

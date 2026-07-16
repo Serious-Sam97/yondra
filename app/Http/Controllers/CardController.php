@@ -15,6 +15,7 @@ use App\Notifications\CardAssignedNotification;
 use App\Notifications\CardStatusNotification;
 use App\Rules\AssignableBoardMember;
 use App\Services\CardService;
+use App\Services\LossReasonGate;
 use App\Services\Notifier;
 use App\Services\QualityGate;
 use Illuminate\Http\Request;
@@ -29,10 +30,13 @@ class CardController extends Controller
 
     public QualityGate $qualityGate;
 
+    public LossReasonGate $lossReasonGate;
+
     public function __construct()
     {
         $this->cardService = resolve(CardService::class);
         $this->qualityGate = resolve(QualityGate::class);
+        $this->lossReasonGate = resolve(LossReasonGate::class);
     }
 
     public function store(Request $request, int $boardId)
@@ -95,20 +99,33 @@ class CardController extends Controller
             'contact.name' => ['nullable', 'string', 'max:255'],
             'contact.email' => ['nullable', 'email', 'max:255'],
             'contact.phone' => ['nullable', 'string', 'max:50'],
+            // A reason chosen from the board's loss_reasons list, required when this
+            // update moves the deal into the Lost stage (YON-66).
+            'loss_reason' => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
 
         // Quality gate guards every path into the done column, not just drag reorder —
-        // otherwise a plain update with section_id would bypass it.
+        // otherwise a plain update with section_id would bypass it. The loss-reason
+        // gate guards the Lost stage the same way.
         if (array_key_exists('section_id', $validated)) {
-            $blocking = $this->qualityGate->blocking(
-                Board::findOrFail($boardId),
-                [$cardId],
-                Section::findOrFail($validated['section_id']),
-            );
+            $targetSection = Section::findOrFail($validated['section_id']);
+
+            $blocking = $this->qualityGate->blocking(Board::findOrFail($boardId), [$cardId], $targetSection);
             if (! empty($blocking)) {
                 return response()->json([
                     'message' => 'Quality gate: card has tests that failed or were not run.',
                     'blocking' => $blocking,
+                ], 422);
+            }
+
+            $needsReason = $this->lossReasonGate->blocking(
+                $board, [$cardId], $targetSection, $validated['loss_reason'] ?? null,
+            );
+            if (! empty($needsReason)) {
+                return response()->json([
+                    'error' => 'loss_reason_required',
+                    'message' => 'A loss reason is required to move this deal to the Lost stage.',
+                    'reasons' => $this->lossReasonGate->reasonsFor($board),
                 ], 422);
             }
         }
@@ -223,14 +240,19 @@ class CardController extends Controller
             'ordered_ids' => ['required', 'array'],
             'ordered_ids.*' => ['integer'],
             'section_id' => ['required', 'integer', Rule::exists('sections', 'id')->where('board_id', $boardId)],
+            // Reason chosen when dragging a deal into the Lost stage (YON-66).
+            'loss_reason' => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
 
         $targetSection = $validated['section_id'];
         // A card is "done" once it enters the board's configured done/won column
         // (falls back to a "Done"-named column) — drives done_at + the QA quality gate.
+        // "Lost" is the mirror for CRM (drives lost_at + the loss-reason gate).
         $board = Board::find($boardId);
         $targetSectionModel = Section::find($targetSection);
         $targetIsDone = $board && $targetSectionModel && $board->marksDone($targetSectionModel);
+        $targetIsLost = $board && $targetSectionModel && $board->marksLost($targetSectionModel);
+        $lossReason = $validated['loss_reason'] ?? null;
 
         // Cards entering "Done" — used by the quality gate and the bug resolution below.
         $enteringIds = ($board && $board->qa_enabled && $targetIsDone)
@@ -252,9 +274,22 @@ class CardController extends Controller
             ], 422);
         }
 
+        // Loss-reason gate: block a deal from entering the Lost stage without a
+        // valid reason. Server-authoritative — the client prompts and retries.
+        $lossBlocking = ($board && $targetSectionModel)
+            ? $this->lossReasonGate->blocking($board, $validated['ordered_ids'], $targetSectionModel, $lossReason)
+            : [];
+        if (! empty($lossBlocking)) {
+            return response()->json([
+                'error' => 'loss_reason_required',
+                'message' => 'A loss reason is required to move this deal to the Lost stage.',
+                'reasons' => $this->lossReasonGate->reasonsFor($board),
+            ], 422);
+        }
+
         $updatedCards = [];
         $movedCardIds = [];
-        DB::transaction(function () use ($validated, $boardId, $targetSection, $targetIsDone, &$updatedCards, &$movedCardIds) {
+        DB::transaction(function () use ($validated, $boardId, $targetSection, $targetIsDone, $targetIsLost, $lossReason, &$updatedCards, &$movedCardIds) {
             foreach ($validated['ordered_ids'] as $position => $cardId) {
                 $card = Card::where('board_id', $boardId)->where('id', $cardId)->first();
                 if (! $card) {
@@ -264,8 +299,13 @@ class CardController extends Controller
                 // this column; a pure reorder within the same column keeps its age.
                 $movedColumn = $card->section_id !== $targetSection;
                 $doneAt = $card->done_at;
+                $lostAt = $card->lost_at;
+                $reason = $card->loss_reason;
                 if ($movedColumn) {
                     $doneAt = $targetIsDone ? ($doneAt ?? now()) : null;
+                    // Entering Lost stamps lost_at + the reason; leaving it clears both.
+                    $lostAt = $targetIsLost ? ($lostAt ?? now()) : null;
+                    $reason = $targetIsLost ? $lossReason : null;
                     $movedCardIds[] = (int) $card->id;
                 }
                 $card->update([
@@ -273,6 +313,8 @@ class CardController extends Controller
                     'section_id' => $targetSection,
                     'section_entered_at' => $movedColumn ? now() : $card->section_entered_at,
                     'done_at' => $doneAt,
+                    'lost_at' => $lostAt,
+                    'loss_reason' => $reason,
                 ]);
                 $updatedCards[] = $card->fresh();
             }
@@ -289,7 +331,7 @@ class CardController extends Controller
             $entries = array_map(
                 fn ($card) => array_intersect_key(
                     $card->toArray(),
-                    array_flip(['id', 'section_id', 'position', 'done_at', 'section_entered_at']),
+                    array_flip(['id', 'section_id', 'position', 'done_at', 'lost_at', 'loss_reason', 'section_entered_at']),
                 ),
                 $updatedCards,
             );

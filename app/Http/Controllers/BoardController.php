@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Events\ProjectEvent;
 use App\Http\Resources\BoardResource;
 use App\Http\Resources\BoardSummaryResource;
+use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Project;
 use App\Services\BoardService;
 use Illuminate\Http\Request;
@@ -84,6 +85,11 @@ class BoardController extends Controller
             'type' => ['sometimes', 'in:kanban,scrum,crm'],
             'currency' => ['sometimes', 'string', 'size:3'],
             'done_section_id' => ['sometimes', 'nullable', 'integer', Rule::exists('sections', 'id')->where('board_id', $boardId)],
+            // CRM loss config (YON-66): the designated Lost stage + the editable
+            // list of loss reasons required when a deal enters it.
+            'lost_section_id' => ['sometimes', 'nullable', 'integer', Rule::exists('sections', 'id')->where('board_id', $boardId)],
+            'loss_reasons' => ['sometimes', 'nullable', 'array'],
+            'loss_reasons.*' => ['string', 'max:120'],
             'qa_enabled' => ['sometimes', 'boolean'],
             'ticket_prefix' => ['sometimes', 'nullable', 'string', 'max:10'],
             'next_ticket_number' => ['sometimes', 'integer', 'min:1'],
@@ -106,6 +112,14 @@ class BoardController extends Controller
             // Email deliverability (YON-51/52).
             'email_spam_safe' => ['sometimes', 'boolean'],
             'require_optin_before_email' => ['sometimes', 'boolean'],
+            // Invoice issuer / emitente details stamped on generated nota fiscais (YON-68).
+            'invoice_issuer' => ['sometimes', 'nullable', 'array'],
+            'invoice_issuer.name' => ['nullable', 'string', 'max:160'],
+            'invoice_issuer.tax_id' => ['nullable', 'string', 'max:40'],
+            'invoice_issuer.address' => ['nullable', 'string', 'max:255'],
+            'invoice_issuer.email' => ['nullable', 'string', 'max:160'],
+            'invoice_issuer.phone' => ['nullable', 'string', 'max:40'],
+            'invoice_issuer.footer' => ['nullable', 'string', 'max:255'],
             // Roadmap flowchart (YON-120): positioned step nodes (one per section)
             // + directed edges. Null clears back to auto-layout.
             'roadmap_config' => ['sometimes', 'nullable', 'array'],
@@ -128,7 +142,28 @@ class BoardController extends Controller
 
         $validated['id'] = $boardId;
 
-        return new BoardSummaryResource($this->boardService->edit($validated), withConnectionFlags: true);
+        // Capture the source project before the edit so a cross-project move can
+        // notify both the old and new project channels (YON-125).
+        $oldProjectId = Board::whereKey($boardId)->value('project_id');
+
+        $board = $this->boardService->edit($validated);
+
+        if (array_key_exists('project_id', $validated) && $board->project_id !== $oldProjectId) {
+            if ($oldProjectId) {
+                broadcast(new ProjectEvent($oldProjectId, 'board.removed', ['board_id' => $boardId]));
+            }
+            // Reuse the 'board.created' frame so a viewer of the destination
+            // project appends the board through the existing live-add handler.
+            if ($board->project_id) {
+                broadcast(new ProjectEvent(
+                    $board->project_id,
+                    'board.created',
+                    $board->fresh()->load('owner:id,name,email')->toArray(),
+                ));
+            }
+        }
+
+        return new BoardSummaryResource($board, withConnectionFlags: true);
     }
 
     public function archive(int $boardId)

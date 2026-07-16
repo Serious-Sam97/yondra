@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Repository;
 
-use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Card;
+use App\Infrastructure\Repository\Concerns\ResolvesCrmBoards;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Auth;
 
 /**
  * Read-only monthly revenue report (YON-64). Generalises the dashboard's
@@ -19,6 +17,8 @@ use Illuminate\Support\Facades\Auth;
  */
 class RevenueReportRepository
 {
+    use ResolvesCrmBoards;
+
     /**
      * @param  string  $from  inclusive start month, "YYYY-MM"
      * @param  string  $to  inclusive end month, "YYYY-MM"
@@ -113,22 +113,5 @@ class RevenueReportRepository
             'count' => $m['count'],
             'clients' => count($m['clients']),
         ], $months));
-    }
-
-    /** CRM boards the current user can see (owns / shared / project-owner). */
-    private function accessibleCrmBoards(): Collection
-    {
-        $userId = (int) Auth::id();
-
-        return Board::whereNull('archived_at')
-            ->where('type', 'crm')
-            ->where(function ($q) use ($userId) {
-                $q->where('user_id', $userId)
-                    ->orWhereHas('sharedWith', fn ($s) => $s->where('users.id', $userId))
-                    ->orWhereHas('project', fn ($p) => $p
-                        ->where('owner_id', $userId)
-                        ->orWhereHas('members', fn ($m) => $m->where('users.id', $userId)->where('role', 'owner')));
-            })
-            ->get(['id', 'currency']);
     }
 }

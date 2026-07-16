@@ -24,6 +24,8 @@ interface ProjectRepository
 
     public function setArchived(int $id, bool $archived);
 
+    public function reorderBoards(int $projectId, array $boardIds): void;
+
     public function duplicate(int $id, ?string $name, bool $includeBoards, bool $includeCards);
 
     public function memberCandidates(int $projectId, ?string $q);
