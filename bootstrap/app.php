@@ -35,5 +35,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // Vortex Anomalies (YON-74): fold every reported exception into the error
+        // monitor. Returns void so Laravel's default logging still runs; the
+        // recorder is self-guarding (never throws, never recurses).
+        $exceptions->report(function (Throwable $e) {
+            app(\App\Services\Monitoring\ErrorRecorder::class)->record($e);
+        });
     })->create();

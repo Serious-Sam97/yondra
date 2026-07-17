@@ -60,10 +60,9 @@ class AppServiceProvider extends ServiceProvider
             $settings = $resolver->resolve();
             $resolver->apply($settings);
 
-            $members = array_map(
-                fn (string $key) => $app->make($resolver->driverClassFor($key)),
-                $resolver->chainKeys($settings),
-            );
+            // One member per enabled+configured chain instance, each wrapped so it asserts its own
+            // model/base_url/reasoning before running (lets N instances of one type coexist).
+            $members = $resolver->buildMembers($settings);
 
             // Load-balance mode adds a per-attempt latency budget; off → plain error failover.
             $balance = $settings['balance'] ?? ['enabled' => false, 'timeout' => 5];

@@ -8,6 +8,7 @@ use App\Events\BoardEvent;
 use App\Events\UserEvent;
 use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Card;
+use App\Infrastructure\Models\Project;
 use App\Infrastructure\Models\Section;
 use App\Infrastructure\Models\Tag;
 use App\Services\Ai\AiDriver;
@@ -432,16 +433,24 @@ class AiAssistService
 
     /**
      * One turn of Vortex, the user-scoped workspace assistant. Same shape as the CRM
-     * chat but grounded on a snapshot of EVERY board the user can see (grouped by
-     * project) and streamed as scope:'vortex-chat' frames on the user's own private
-     * channel via {@see UserEvent} — Vortex floats over every page, not one board.
+     * chat but grounded on the user's workspace and streamed as scope:'vortex-chat'
+     * frames on their own private channel via {@see UserEvent} — Vortex floats over
+     * every page, not one board.
+     *
+     * Grounding depends on $mounts (already authorization-checked by the controller):
+     * none → a shallow overview of every board the user can see; otherwise each
+     * mounted board contributes a DEEP block (every card with its metadata) and each
+     * mounted project a medium block (all its boards at overview depth).
      *
      * @param  list<array{role:string,content:string}>  $messages
+     * @param  list<array{type:string,id:int}>  $mounts
      */
-    public function streamWorkspaceChat(int $userId, string $requestId, array $messages): void
+    public function streamWorkspaceChat(int $userId, string $requestId, array $messages, array $mounts = []): void
     {
         try {
-            $context = $this->workspaceStateBlock($userId);
+            $context = $mounts === []
+                ? $this->workspaceStateBlock($userId)
+                : $this->mountedStateBlock($mounts);
         } catch (\Throwable $e) {
             Log::warning('AI workspace chat context failed', ['user' => $userId, 'error' => $e->getMessage()]);
             $this->failWorkspace($userId, $requestId, 'Could not read your workspace.');
@@ -449,13 +458,31 @@ class AiAssistService
             return;
         }
 
+        $focus = $mounts === []
+            ? 'their workspace (projects, boards, columns with card counts, and cards due soon or overdue)'
+            : 'the contexts they have mounted — the snapshot holds ONLY those, so anything else is out of view';
+
         $system = 'You are Vortex — Yondra\'s friendly in-app guide: a cheerful little portal sprite that helps '
-            .'the user find their way around their projects and boards. Answer questions about their workspace '
-            .'using ONLY the snapshot below (projects, boards, columns with card counts, and cards due soon or '
-            .'overdue). If the answer is not in the snapshot, say you can\'t see it from here rather than '
-            .'guessing — never invent projects, boards, cards, or dates. '
+            .'the user find their way around their projects and boards. Answer questions about '
+            .$focus.' using ONLY the snapshot below. If the answer is not in the snapshot, say you '
+            .'can\'t see it from here rather than guessing — never invent projects, boards, cards, or dates. '
             .self::INJECTION_NOTE.' Stay in character: warm, upbeat, and brief — a sentence or three of plain '
-            .'text, no preamble, no markdown.';
+            .'text, no preamble, no markdown. '
+            .'You can also PROPOSE workspace actions when the user asks for one. Supported: creating a project '
+            .'(optionally with starter boards), creating a board (optionally inside an existing project), '
+            .'creating a card on a board, adding a column to a board, and archiving a board — projects and '
+            .'boards are referenced by their id from the snapshot. To propose, reply with ONE short sentence, '
+            .'then end with a single line in exactly one of these forms: '
+            .'ACTION:{"kind":"create_project","name":"…","description":"…","boards":[{"name":"…","type":"kanban"}]} | '
+            .'ACTION:{"kind":"create_board","name":"…","type":"kanban","project_id":123} | '
+            .'ACTION:{"kind":"create_card","board_id":7,"board_name":"…","name":"…","description":"…","column":"To Do"} | '
+            .'ACTION:{"kind":"add_column","board_id":7,"board_name":"…","name":"…"} | '
+            .'ACTION:{"kind":"archive_board","board_id":7,"board_name":"…"}. '
+            .'Board types are kanban, scrum, or crm (default kanban). The user confirms before anything happens. '
+            .'You cannot perform changes yourself: when asked to create or change something you MUST either end '
+            .'with an ACTION line (phrase your sentence as an offer, e.g. "Sure — confirm below!") or say you '
+            .'can\'t do that — NEVER state that something was created or changed. Never invent ids, and never '
+            .'propose an action the user did not ask for.';
 
         // Ground every turn on the current snapshot by prepending it to the conversation.
         // (The history itself is trusted operator input; the snapshot is the untrusted-data block.)
@@ -483,11 +510,114 @@ class AiAssistService
             return;
         }
 
+        [$clean, $action] = self::extractVortexAction($full);
         broadcast(new UserEvent($userId, 'ai.done', [
             'scope' => 'vortex-chat',
             'request_id' => $requestId,
-            'text' => $full,
-        ]));
+            'text' => $clean,
+        ] + ($action !== null ? ['action' => $action] : [])));
+    }
+
+    /**
+     * Pull a proposed action off the end of a Vortex reply. The model ends its text
+     * with one `ACTION:{json}` line when it proposes something; the line is ALWAYS
+     * stripped from the visible text, and the payload survives only if it matches
+     * the small whitelist below — the model gets no other write path, and even a
+     * valid proposal is executed client-side through the user's normal authorized
+     * endpoints after an explicit confirm.
+     *
+     * @return array{0: string, 1: ?array<string,mixed>}
+     */
+    public static function extractVortexAction(string $full): array
+    {
+        if (! preg_match('/^ACTION:(\{.*\})\s*$/m', $full, $m)) {
+            return [trim($full), null];
+        }
+        $clean = trim(str_replace($m[0], '', $full));
+
+        $raw = json_decode($m[1], true);
+        if (! is_array($raw)) {
+            return [$clean, null];
+        }
+
+        $str = fn ($v, int $max): ?string => is_string($v) && trim($v) !== '' && mb_strlen($v) <= $max ? trim($v) : null;
+        $type = fn ($v): string => in_array($v, ['kanban', 'scrum', 'crm'], true) ? $v : 'kanban';
+
+        $name = $str($raw['name'] ?? null, 100);
+        $boardId = is_int($raw['board_id'] ?? null) && $raw['board_id'] > 0 ? $raw['board_id'] : null;
+        $boardName = $str($raw['board_name'] ?? null, 100);
+
+        switch ($raw['kind'] ?? null) {
+            case 'create_project':
+                if ($name === null) {
+                    break;
+                }
+                $boards = [];
+                foreach (is_array($raw['boards'] ?? null) ? $raw['boards'] : [] as $b) {
+                    $bName = $str(is_array($b) ? ($b['name'] ?? null) : null, 100);
+                    if ($bName !== null && count($boards) < 5) {
+                        $boards[] = ['name' => $bName, 'type' => $type($b['type'] ?? null)];
+                    }
+                }
+                $action = ['kind' => 'create_project', 'name' => $name, 'boards' => $boards];
+                if (($desc = $str($raw['description'] ?? null, 500)) !== null) {
+                    $action['description'] = $desc;
+                }
+
+                return [$clean, $action];
+
+            case 'create_board':
+                if ($name === null) {
+                    break;
+                }
+                $action = ['kind' => 'create_board', 'name' => $name, 'type' => $type($raw['type'] ?? null)];
+                if (is_int($raw['project_id'] ?? null) && $raw['project_id'] > 0) {
+                    $action['project_id'] = $raw['project_id'];
+                }
+
+                return [$clean, $action];
+
+            case 'create_card':
+                if ($name === null || $boardId === null) {
+                    break;
+                }
+                $action = ['kind' => 'create_card', 'board_id' => $boardId, 'name' => $name];
+                if (($desc = $str($raw['description'] ?? null, 500)) !== null) {
+                    $action['description'] = $desc;
+                }
+                if (($column = $str($raw['column'] ?? null, 100)) !== null) {
+                    $action['column'] = $column;
+                }
+                if ($boardName !== null) {
+                    $action['board_name'] = $boardName;
+                }
+
+                return [$clean, $action];
+
+            case 'add_column':
+                if ($name === null || $boardId === null) {
+                    break;
+                }
+                $action = ['kind' => 'add_column', 'board_id' => $boardId, 'name' => $name];
+                if ($boardName !== null) {
+                    $action['board_name'] = $boardName;
+                }
+
+                return [$clean, $action];
+
+            case 'archive_board':
+                if ($boardId === null) {
+                    break;
+                }
+                $action = ['kind' => 'archive_board', 'board_id' => $boardId];
+                if ($boardName !== null) {
+                    $action['board_name'] = $boardName;
+                }
+
+                return [$clean, $action];
+        }
+
+        return [$clean, null];
     }
 
     private function failWorkspace(int $userId, string $requestId, string $message): void
@@ -530,53 +660,17 @@ class AiAssistService
         $truncated = $boards->count() > self::WORKSPACE_MAX_BOARDS;
         $boards = $boards->take(self::WORKSPACE_MAX_BOARDS);
 
-        $today = now()->startOfDay();
         $lines = [];
         $lastProject = false; // sentinel so the first "no project" group still prints a header
         foreach ($boards as $board) {
-            $projectName = $board->project?->name ?? '(no project)';
+            $projectName = $board->project
+                ? $board->project->name.' (id '.$board->project->id.')'
+                : '(no project)';
             if ($projectName !== $lastProject) {
                 $lines[] = '# Project: '.$projectName;
                 $lastProject = $projectName;
             }
-
-            $sections = Section::where('board_id', $board->id)->orderBy('order')->get(['id', 'name']);
-            $counts = Card::where('board_id', $board->id)
-                ->whereNull('archived_at')
-                ->whereNull('parent_card_id')
-                ->selectRaw('section_id, count(*) as n')
-                ->groupBy('section_id')
-                ->pluck('n', 'section_id');
-
-            $cols = $sections->map(function ($s) use ($board, $counts) {
-                $role = $board->marksDone($s) ? ' [WON/DONE]'
-                    : ($board->marksLost($s) ? ' [LOST]' : '');
-
-                return $s->name.' ('.($counts[$s->id] ?? 0).')'.$role;
-            })->implode(', ');
-
-            $lines[] = '## Board: '.$board->name.' ['.$board->type.']';
-            $lines[] = 'Columns: '.($cols !== '' ? $cols : '(none)');
-
-            $due = Card::where('board_id', $board->id)
-                ->whereNull('archived_at')
-                ->whereNull('parent_card_id')
-                ->whereNull('done_at')
-                ->whereNotNull('due_date')
-                ->where('due_date', '<=', now()->addDays(7))
-                ->orderBy('due_date')
-                ->limit(self::WORKSPACE_MAX_DUE)
-                ->get(['name', 'due_date', 'is_done']);
-
-            $dueLines = $due->reject(fn ($c) => (bool) $c->is_done)->map(function ($c) use ($today) {
-                $overdue = $c->due_date->lt($today) ? ' OVERDUE' : '';
-
-                return '- '.($c->name ?: '(untitled)').' — due '.$c->due_date->format('Y-m-d').$overdue;
-            });
-            if ($dueLines->isNotEmpty()) {
-                $lines[] = 'Due soon / overdue:';
-                $lines = array_merge($lines, $dueLines->all());
-            }
+            $lines = array_merge($lines, $this->boardOverviewLines($board));
             $lines[] = '';
         }
 
@@ -588,6 +682,190 @@ class AiAssistService
         }
 
         return "<workspace>\n".implode("\n", $lines)."\n</workspace>";
+    }
+
+    /**
+     * One board at OVERVIEW depth: name/type, columns with live card counts and
+     * WON/LOST roles, plus overdue / due-within-a-week cards. Shared by the
+     * whole-workspace snapshot and mounted-project blocks.
+     *
+     * @return list<string>
+     */
+    private function boardOverviewLines(Board $board): array
+    {
+        $sections = Section::where('board_id', $board->id)->orderBy('order')->get(['id', 'name']);
+        $counts = Card::where('board_id', $board->id)
+            ->whereNull('archived_at')
+            ->whereNull('parent_card_id')
+            ->selectRaw('section_id, count(*) as n')
+            ->groupBy('section_id')
+            ->pluck('n', 'section_id');
+
+        $cols = $sections->map(function ($s) use ($board, $counts) {
+            $role = $board->marksDone($s) ? ' [WON/DONE]'
+                : ($board->marksLost($s) ? ' [LOST]' : '');
+
+            return $s->name.' ('.($counts[$s->id] ?? 0).')'.$role;
+        })->implode(', ');
+
+        $lines = [];
+        $lines[] = '## Board: '.$board->name.' (id '.$board->id.') ['.$board->type.']';
+        $lines[] = 'Columns: '.($cols !== '' ? $cols : '(none)');
+
+        $today = now()->startOfDay();
+        $due = Card::where('board_id', $board->id)
+            ->whereNull('archived_at')
+            ->whereNull('parent_card_id')
+            ->whereNull('done_at')
+            ->whereNotNull('due_date')
+            ->where('due_date', '<=', now()->addDays(7))
+            ->orderBy('due_date')
+            ->limit(self::WORKSPACE_MAX_DUE)
+            ->get(['name', 'due_date', 'is_done']);
+
+        $dueLines = $due->reject(fn ($c) => (bool) $c->is_done)->map(function ($c) use ($today) {
+            $overdue = $c->due_date->lt($today) ? ' OVERDUE' : '';
+
+            return '- '.($c->name ?: '(untitled)').' — due '.$c->due_date->format('Y-m-d').$overdue;
+        });
+        if ($dueLines->isNotEmpty()) {
+            $lines[] = 'Due soon / overdue:';
+            $lines = array_merge($lines, $dueLines->all());
+        }
+
+        return $lines;
+    }
+
+    /** Card ceiling for one mounted board's deep block. */
+    private const MOUNT_MAX_CARDS = 60;
+
+    /**
+     * The snapshot when the user has MOUNTED contexts: one block per mount, in the
+     * order they mounted them. Boards go deep, projects go wide. Models are re-read
+     * here (the job runs off-thread) — a mount deleted in between throws, and the
+     * caller turns that into the generic context failure.
+     *
+     * @param  list<array{type:string,id:int}>  $mounts
+     */
+    private function mountedStateBlock(array $mounts): string
+    {
+        $blocks = [];
+        foreach ($mounts as $mount) {
+            $blocks[] = $mount['type'] === 'board'
+                ? $this->boardDeepBlock(Board::findOrFail($mount['id']))
+                : $this->projectBlock(Project::findOrFail($mount['id']));
+        }
+
+        return "<workspace>\n".implode("\n\n", $blocks)."\n</workspace>";
+    }
+
+    /**
+     * One mounted project at MEDIUM depth: its identity plus every non-archived
+     * board it holds, each at overview depth.
+     */
+    private function projectBlock(Project $project): string
+    {
+        $lines = ['# Mounted project: '.$project->name.' (id '.$project->id.')'];
+        if ((string) $project->description !== '') {
+            $lines[] = 'About: '.mb_substr((string) $project->description, 0, 200);
+        }
+
+        $boards = Board::whereNull('archived_at')
+            ->where('project_id', $project->id)
+            ->orderBy('position')
+            ->get();
+        if ($boards->isEmpty()) {
+            $lines[] = '(no boards in this project yet)';
+        }
+        foreach ($boards as $board) {
+            $lines[] = '';
+            $lines = array_merge($lines, $this->boardOverviewLines($board));
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * One mounted board at FULL depth: every column and every card with its
+     * metadata — owner, client, tags, priority, value/paid, due (with OVERDUE),
+     * checklist progress, won/lost dates. Capped at MOUNT_MAX_CARDS with an
+     * explicit truncation note so the model never half-knows silently.
+     */
+    private function boardDeepBlock(Board $board): string
+    {
+        $currency = $board->currency ?: '';
+        $money = fn ($amount): string => $currency === ''
+            ? number_format((float) $amount, 2)
+            : trim($currency.' '.number_format((float) $amount, 2));
+
+        $sections = Section::where('board_id', $board->id)->orderBy('order')->get(['id', 'name']);
+        $cards = Card::where('board_id', $board->id)
+            ->whereNull('archived_at')
+            ->whereNull('parent_card_id')
+            ->with(['assignedUser:id,name', 'contact:id,name', 'tags:id,name'])
+            ->withCount([
+                'checklistItems as checklist_total',
+                'checklistItems as checklist_done' => fn ($q) => $q->where('is_done', true),
+            ])
+            ->orderBy('position')
+            ->get();
+        $truncated = $cards->count() > self::MOUNT_MAX_CARDS;
+        $bySection = $cards->take(self::MOUNT_MAX_CARDS)->groupBy('section_id');
+
+        $today = now()->startOfDay();
+        $lines = ['# Mounted board: '.$board->name.' (id '.$board->id.') ['.$board->type.']'];
+        foreach ($sections as $section) {
+            $role = $board->marksDone($section) ? ' [WON/DONE stage]'
+                : ($board->marksLost($section) ? ' [LOST stage]' : '');
+            $sectionCards = $bySection->get($section->id, collect());
+            $lines[] = '## '.$section->name.$role.' ('.$sectionCards->count().')';
+            if ($sectionCards->isEmpty()) {
+                $lines[] = '(none)';
+
+                continue;
+            }
+            foreach ($sectionCards as $c) {
+                $bits = [];
+                if ($c->assignedUser) {
+                    $bits[] = 'owner @'.$c->assignedUser->name;
+                }
+                if ($c->contact) {
+                    $bits[] = 'client '.$c->contact->name;
+                }
+                if ($c->tags->isNotEmpty()) {
+                    $bits[] = 'tags '.$c->tags->pluck('name')->implode('/');
+                }
+                if ($c->priority) {
+                    $bits[] = 'priority '.$c->priority;
+                }
+                if ($c->value !== null) {
+                    $bits[] = 'value '.$money($c->value);
+                }
+                if ($c->amount_paid !== null && (float) $c->amount_paid > 0) {
+                    $bits[] = 'paid '.$money($c->amount_paid);
+                }
+                if ($c->due_date) {
+                    $overdue = ! ($c->is_done || $c->done_at) && $c->due_date->lt($today);
+                    $bits[] = 'due '.$c->due_date->format('Y-m-d').($overdue ? ' OVERDUE' : '');
+                }
+                if ((int) $c->checklist_total > 0) {
+                    $bits[] = 'checklist '.$c->checklist_done.'/'.$c->checklist_total;
+                }
+                if ($c->done_at) {
+                    $bits[] = 'done '.$c->done_at->format('Y-m-d');
+                }
+                if ($c->lost_at) {
+                    $bits[] = 'lost '.$c->lost_at->format('Y-m-d');
+                }
+                $suffix = $bits === [] ? '' : ' ['.implode(', ', $bits).']';
+                $lines[] = '- '.($c->name ?: '(untitled)').$suffix;
+            }
+        }
+        if ($truncated) {
+            $lines[] = '(board has more cards — only the first '.self::MOUNT_MAX_CARDS.' are shown)';
+        }
+
+        return implode("\n", $lines);
     }
 
     /** Fibonacci deck the estimator is allowed to return (matches Planning Poker). */

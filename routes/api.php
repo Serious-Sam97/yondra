@@ -23,6 +23,7 @@ use App\Http\Controllers\GitHubWebhookController;
 use App\Http\Controllers\ImageUploadController;
 use App\Http\Controllers\ImportModelController;
 use App\Http\Controllers\IntakeConfirmationController;
+use App\Http\Controllers\ErrorIngestController;
 use App\Http\Controllers\IntakeWebhookController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NotificationPreferenceController;
@@ -77,6 +78,11 @@ Route::post('/webhooks/intake/{token}', [IntakeWebhookController::class, 'handle
 Route::get('/webhooks/intake/confirm/{token}', [IntakeConfirmationController::class, 'confirm'])
     ->name('intake.confirm')
     ->middleware('throttle:60,1');
+
+// Inbound browser error reports (YON-74 Anomalies) — public, authenticated by the
+// app-wide TELEMETRY_INGEST_TOKEN in the path. Throttled: an open endpoint is a
+// spam target. Feeds the same Vortex error monitor as backend exceptions.
+Route::post('/webhooks/errors/{token}', [ErrorIngestController::class, 'handle'])->middleware('throttle:120,1');
 
 // Private image streaming — signature-gated instead of Sanctum because the
 // frontend consumes these as plain <img src> URLs (no Bearer header possible).

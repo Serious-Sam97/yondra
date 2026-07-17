@@ -2,6 +2,7 @@
 
 use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Card;
+use App\Infrastructure\Models\CardChecklistItem;
 use App\Infrastructure\Models\CardComment;
 use App\Infrastructure\Models\Contact;
 use App\Infrastructure\Models\Project;
@@ -546,20 +547,181 @@ it('vortex-chat: grounds the model in a workspace snapshot scoped to the caller'
         ['role' => 'user', 'content' => 'what is overdue?'],
     ]);
 
-    Http::assertSent(function ($request) {
+    Http::assertSent(function ($request) use ($board) {
         $messages = $request['messages'];
         $snapshot = $messages[0]['content'] ?? '';
         $lastTurn = $messages[count($messages) - 1]['content'] ?? '';
 
         return str_contains($snapshot, '<workspace>')
             && str_contains($snapshot, 'Project: Skunkworks')
-            && str_contains($snapshot, 'Board: B [kanban]')
+            && str_contains($snapshot, 'Board: B (id '.$board->id.') [kanban]')
             && str_contains($snapshot, 'To Do (1)')          // column with live count
             && str_contains($snapshot, 'Ship login')          // the overdue card…
             && str_contains($snapshot, 'OVERDUE')             // …flagged as such
             && ! str_contains($snapshot, 'Secret Ops')        // no cross-user leak
             && $lastTurn === 'what is overdue?';
     });
+});
+
+it('vortex-chat mounts: validates shape and rejects a mount the caller cannot access', function () {
+    configureAnthropic();
+    Bus::fake();
+    $owner = User::factory()->create();
+    aiCard($owner);
+    $msg = ['messages' => [['role' => 'user', 'content' => 'hi']]];
+
+    // Bad mount type / too many mounts.
+    $this->actingAs($owner)->postJson('/api/ai/vortex-chat', $msg + [
+        'mounts' => [['type' => 'card', 'id' => 1]],
+    ])->assertStatus(422);
+    $this->actingAs($owner)->postJson('/api/ai/vortex-chat', $msg + [
+        'mounts' => array_fill(0, 7, ['type' => 'board', 'id' => 1]),
+    ])->assertStatus(422);
+
+    // Someone else's board: never dispatched, clear eject message.
+    $stranger = User::factory()->create();
+    $foreign = Board::create(['user_id' => $stranger->id, 'name' => 'Secret Ops', 'description' => '', 'type' => 'kanban']);
+    $this->actingAs($owner)->postJson('/api/ai/vortex-chat', $msg + [
+        'mounts' => [['type' => 'board', 'id' => $foreign->id]],
+    ])->assertStatus(422);
+    Bus::assertNotDispatched(GenerateWorkspaceChatJob::class);
+});
+
+it('vortex-chat mounts: passes authorized mounts through to the job', function () {
+    configureAnthropic();
+    Bus::fake();
+    $owner = User::factory()->create();
+    [$board] = aiCard($owner);
+    $project = Project::create(['owner_id' => $owner->id, 'name' => 'Skunkworks']);
+
+    $this->actingAs($owner)->postJson('/api/ai/vortex-chat', [
+        'messages' => [['role' => 'user', 'content' => 'hi']],
+        'mounts' => [
+            ['type' => 'board', 'id' => $board->id],
+            ['type' => 'project', 'id' => $project->id],
+        ],
+    ])->assertStatus(202);
+
+    Bus::assertDispatched(GenerateWorkspaceChatJob::class, fn ($job) => $job->mounts === [
+        ['type' => 'board', 'id' => $board->id],
+        ['type' => 'project', 'id' => $project->id],
+    ]);
+});
+
+it('vortex-chat mounts: a mounted board goes DEEP and replaces the workspace overview', function () {
+    configureAnthropic();
+    Http::fake(['api.anthropic.com/*' => Http::response(aiSse(['ok']), 200)]);
+    $owner = User::factory()->create();
+    [$board, $card] = aiCard($owner); // board "B", section "To Do", card "Ship login"
+
+    // Dress the card with the metadata the deep block should carry.
+    $card->update(['assigned_user_id' => $owner->id, 'priority' => 'high']);
+    $tag = Tag::create(['board_id' => $board->id, 'name' => 'auth', 'color' => '#ff2d95']);
+    $card->tags()->attach($tag->id);
+    CardChecklistItem::create(['card_id' => $card->id, 'text' => 'a', 'is_done' => true, 'position' => 0]);
+    CardChecklistItem::create(['card_id' => $card->id, 'text' => 'b', 'is_done' => false, 'position' => 1]);
+
+    // A second board of the same user must NOT appear when mounts are set.
+    Board::create(['user_id' => $owner->id, 'name' => 'Elsewhere', 'description' => '', 'type' => 'kanban']);
+
+    app(AiAssistService::class)->streamWorkspaceChat($owner->id, 'req', [
+        ['role' => 'user', 'content' => 'status?'],
+    ], [['type' => 'board', 'id' => $board->id]]);
+
+    Http::assertSent(function ($request) use ($owner, $board) {
+        $snapshot = $request['messages'][0]['content'] ?? '';
+
+        return str_contains($snapshot, 'Mounted board: B (id '.$board->id.') [kanban]')
+            && str_contains($snapshot, 'Ship login')
+            && str_contains($snapshot, 'owner @'.$owner->name)
+            && str_contains($snapshot, 'tags auth')
+            && str_contains($snapshot, 'priority high')
+            && str_contains($snapshot, 'checklist 1/2')
+            && ! str_contains($snapshot, 'Elsewhere');
+    });
+});
+
+it('vortex-chat mounts: a mounted project carries all its boards at overview depth', function () {
+    configureAnthropic();
+    Http::fake(['api.anthropic.com/*' => Http::response(aiSse(['ok']), 200)]);
+    $owner = User::factory()->create();
+    [$board] = aiCard($owner);
+    $project = Project::create(['owner_id' => $owner->id, 'name' => 'Skunkworks', 'description' => 'Secret plans']);
+    $board->update(['project_id' => $project->id]);
+    Board::create(['user_id' => $owner->id, 'name' => 'Elsewhere', 'description' => '', 'type' => 'kanban']);
+
+    app(AiAssistService::class)->streamWorkspaceChat($owner->id, 'req', [
+        ['role' => 'user', 'content' => 'status?'],
+    ], [['type' => 'project', 'id' => $project->id]]);
+
+    Http::assertSent(function ($request) use ($board) {
+        $snapshot = $request['messages'][0]['content'] ?? '';
+
+        return str_contains($snapshot, 'Mounted project: Skunkworks')
+            && str_contains($snapshot, 'About: Secret plans')
+            && str_contains($snapshot, 'Board: B (id '.$board->id.') [kanban]')
+            && str_contains($snapshot, 'To Do (1)')
+            && ! str_contains($snapshot, 'Elsewhere');
+    });
+});
+
+it('vortex actions: extracts and validates a proposed action, always stripping the ACTION line', function () {
+    // A valid create_project proposal with starter boards.
+    [$text, $action] = AiAssistService::extractVortexAction(
+        "On it!\nACTION:{\"kind\":\"create_project\",\"name\":\"test AI\",\"boards\":[{\"name\":\"Dev\",\"type\":\"scrum\"},{\"name\":\"Sales\",\"type\":\"crm\"}]}",
+    );
+    expect($text)->toBe('On it!')
+        ->and($action)->toBe([
+            'kind' => 'create_project',
+            'name' => 'test AI',
+            'boards' => [
+                ['name' => 'Dev', 'type' => 'scrum'],
+                ['name' => 'Sales', 'type' => 'crm'],
+            ],
+        ]);
+
+    // create_board with a project reference; unknown board type falls back to kanban.
+    [, $action] = AiAssistService::extractVortexAction(
+        "Sure!\nACTION:{\"kind\":\"create_board\",\"name\":\"Bugs\",\"type\":\"weird\",\"project_id\":7}",
+    );
+    expect($action)->toBe(['kind' => 'create_board', 'name' => 'Bugs', 'type' => 'kanban', 'project_id' => 7]);
+
+    // create_card with column + board label; description carried through.
+    [, $action] = AiAssistService::extractVortexAction(
+        "Yes!\nACTION:{\"kind\":\"create_card\",\"board_id\":7,\"board_name\":\"Sprint 12\",\"name\":\"Fix login\",\"description\":\"OAuth bug\",\"column\":\"To Do\"}",
+    );
+    expect($action)->toBe([
+        'kind' => 'create_card', 'board_id' => 7, 'name' => 'Fix login',
+        'description' => 'OAuth bug', 'column' => 'To Do', 'board_name' => 'Sprint 12',
+    ]);
+
+    // add_column and archive_board.
+    [, $action] = AiAssistService::extractVortexAction(
+        "Ok!\nACTION:{\"kind\":\"add_column\",\"board_id\":7,\"name\":\"QA\"}",
+    );
+    expect($action)->toBe(['kind' => 'add_column', 'board_id' => 7, 'name' => 'QA']);
+    [, $action] = AiAssistService::extractVortexAction(
+        "Ok!\nACTION:{\"kind\":\"archive_board\",\"board_id\":7,\"board_name\":\"Old stuff\"}",
+    );
+    expect($action)->toBe(['kind' => 'archive_board', 'board_id' => 7, 'board_name' => 'Old stuff']);
+
+    // Unknown kind / broken JSON / missing required fields → no action, but the
+    // line still never reaches the user.
+    foreach ([
+        "Hm.\nACTION:{\"kind\":\"delete_everything\",\"name\":\"x\"}",
+        "Hm.\nACTION:{not json}",
+        "Hm.\nACTION:{\"kind\":\"create_board\"}",
+        "Hm.\nACTION:{\"kind\":\"create_card\",\"name\":\"x\"}",
+        "Hm.\nACTION:{\"kind\":\"add_column\",\"board_id\":\"7\",\"name\":\"x\"}",
+        "Hm.\nACTION:{\"kind\":\"archive_board\"}",
+    ] as $reply) {
+        [$text, $action] = AiAssistService::extractVortexAction($reply);
+        expect($action)->toBeNull()->and($text)->toBe('Hm.');
+    }
+
+    // Plain reply → untouched.
+    [$text, $action] = AiAssistService::extractVortexAction('Just a normal answer.');
+    expect($action)->toBeNull()->and($text)->toBe('Just a normal answer.');
 });
 
 it('rate-limits the AI endpoints per user (throttle:ai)', function () {

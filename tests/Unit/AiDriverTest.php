@@ -2,6 +2,7 @@
 
 use App\Services\Ai\AiDriver;
 use App\Services\Ai\AnthropicDriver;
+use App\Services\Ai\ConfiguredAiDriver;
 use App\Services\Ai\GroqDriver;
 use App\Services\Ai\OllamaDriver;
 use Illuminate\Support\Facades\Http;
@@ -179,7 +180,8 @@ it('streamChat throws on a non-2xx response', function () {
 
 it('the AiDriver binding builds a FallbackAiDriver from the configured chain', function () {
     // With no ai_settings row (unit tests have no DB), the resolver falls back to config
-    // defaults: chain = [config('services.ai.driver')], filtered to configured providers.
+    // defaults: one instance per provider type (id = type), chain = [config('services.ai.driver')],
+    // filtered to configured instances. Each member is a ConfiguredAiDriver wrapping the concrete.
     $rebuild = function (string $driver, array $extra) {
         config(array_merge(['services.ai.driver' => $driver], $extra));
         app(App\Services\Ai\AiSettingsResolver::class)->flush();
@@ -190,13 +192,14 @@ it('the AiDriver binding builds a FallbackAiDriver from the configured chain', f
 
     $d = $rebuild('anthropic', ['services.ai.anthropic.api_key' => 'sk-test']);
     expect($d)->toBeInstanceOf(App\Services\Ai\FallbackAiDriver::class)
-        ->and($d->members()[0])->toBeInstanceOf(AnthropicDriver::class);
+        ->and($d->members()[0])->toBeInstanceOf(ConfiguredAiDriver::class)
+        ->and($d->members()[0]->inner())->toBeInstanceOf(AnthropicDriver::class);
 
     $d = $rebuild('groq', ['services.ai.groq.api_key' => 'gsk-test']);
-    expect($d->members()[0])->toBeInstanceOf(GroqDriver::class);
+    expect($d->members()[0]->inner())->toBeInstanceOf(GroqDriver::class);
 
     $d = $rebuild('ollama', ['services.ai.ollama.base_url' => 'http://localhost:11434/v1']);
-    expect($d->members()[0])->toBeInstanceOf(OllamaDriver::class);
+    expect($d->members()[0]->inner())->toBeInstanceOf(OllamaDriver::class);
 
     // An unconfigured provider is filtered out → empty chain → unavailable, no crash.
     $d = $rebuild('anthropic', ['services.ai.anthropic.api_key' => null]);

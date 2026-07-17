@@ -3,6 +3,7 @@
 use App\Http\Controllers\Vortex\AiSettingsController;
 use App\Http\Controllers\Vortex\DatabaseController;
 use App\Http\Controllers\Vortex\EntityController;
+use App\Http\Controllers\Vortex\ErrorController;
 use App\Http\Controllers\Vortex\OverviewController;
 use App\Http\Controllers\Vortex\SystemController;
 use Illuminate\Http\Request;
@@ -46,6 +47,16 @@ Route::get('/system/logs/files', [SystemController::class, 'logFiles']);
 Route::get('/system/logs', [SystemController::class, 'logs']);
 Route::get('/system/storage', [SystemController::class, 'storage']);
 
+// Anomalies — self-hosted error monitor (YON-74).
+Route::get('/errors', [ErrorController::class, 'index']);
+Route::get('/errors/stats', [ErrorController::class, 'stats']);
+Route::delete('/errors/resolved', [ErrorController::class, 'clearResolved']);
+Route::get('/errors/{id}', [ErrorController::class, 'show'])->whereNumber('id');
+Route::post('/errors/{id}/resolve', [ErrorController::class, 'resolve'])->whereNumber('id');
+Route::post('/errors/{id}/ignore', [ErrorController::class, 'ignore'])->whereNumber('id');
+Route::post('/errors/{id}/reopen', [ErrorController::class, 'reopen'])->whereNumber('id');
+Route::delete('/errors/{id}', [ErrorController::class, 'destroy'])->whereNumber('id');
+
 Route::get('/ai-settings', [AiSettingsController::class, 'index']);
 Route::put('/ai-settings', [AiSettingsController::class, 'update']);
-Route::post('/ai-settings/health/{driver}', [AiSettingsController::class, 'health']);
+Route::post('/ai-settings/health/{instance}', [AiSettingsController::class, 'health']);

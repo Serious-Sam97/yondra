@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Infrastructure\Models\Board;
+use App\Infrastructure\Models\Project;
 use App\Jobs\GenerateAiAssistJob;
 use App\Jobs\GenerateBoardSummaryJob;
 use App\Jobs\GenerateCrmChatJob;
@@ -179,9 +181,15 @@ class AiAssistController extends Controller
 
     /**
      * One turn of Vortex, the user-scoped workspace assistant (mascot chat). No board in
-     * the URL — the snapshot covers every board the caller can see, and the reply streams
-     * back on their own private channel as scope:'vortex-chat' frames. Same conversation
-     * contract as the CRM chat: the client posts the whole transcript each turn.
+     * the URL — by default the snapshot covers every board the caller can see, and the
+     * reply streams back on their own private channel as scope:'vortex-chat' frames.
+     * Same conversation contract as the CRM chat: the client posts the whole transcript
+     * each turn.
+     *
+     * Optional `mounts` focus the grounding on specific contexts (deep board blocks /
+     * project-wide blocks). Every mount is access-checked HERE, per request — a stale
+     * chip for a board the caller lost access to gets a 422 telling them to eject it,
+     * never a silent leak into the snapshot.
      */
     public function workspaceChat(Request $request, AiDriver $ai)
     {
@@ -194,15 +202,29 @@ class AiAssistController extends Controller
             'messages' => ['required', 'array', 'min:1', 'max:30'],
             'messages.*.role' => ['required', 'string', 'in:user,assistant'],
             'messages.*.content' => ['required', 'string', 'max:4000'],
+            'mounts' => ['sometimes', 'array', 'max:6'],
+            'mounts.*.type' => ['required', 'string', 'in:project,board'],
+            'mounts.*.id' => ['required', 'integer', 'min:1'],
         ]);
         $requestId = $validated['request_id'] ?? (string) Str::uuid();
+        $userId = (int) $request->user()->id;
+
+        $mounts = [];
+        foreach ($validated['mounts'] ?? [] as $m) {
+            $id = (int) $m['id'];
+            $accessible = $m['type'] === 'board'
+                ? (($board = Board::find($id)) && $board->archived_at === null && $board->isAccessibleBy($userId))
+                : (($project = Project::find($id)) && $project->archived_at === null && $project->isAccessibleBy($userId));
+            abort_unless($accessible, 422, 'A mounted project or board is gone or no longer accessible — eject it and try again.');
+            $mounts[] = ['type' => $m['type'], 'id' => $id];
+        }
 
         $messages = array_map(
             fn (array $m) => ['role' => $m['role'], 'content' => $m['content']],
             $validated['messages'],
         );
 
-        GenerateWorkspaceChatJob::dispatch((int) $request->user()->id, $requestId, array_values($messages));
+        GenerateWorkspaceChatJob::dispatch($userId, $requestId, array_values($messages), $mounts);
 
         return response()->json(['request_id' => $requestId], 202);
     }
