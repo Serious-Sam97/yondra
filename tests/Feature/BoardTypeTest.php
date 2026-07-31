@@ -191,3 +191,60 @@ it('assigns a card to a sprint with story points', function () {
         ->assertCreated()
         ->assertJsonFragment(['story_points' => 5, 'sprint_id' => $sprint->id]);
 });
+
+it('drains the reserved backlog into the sprint pool when a board is converted to scrum', function () {
+    $user = User::factory()->create();
+    $board = Board::create(['user_id' => $user->id, 'name' => 'Work', 'description' => '', 'type' => 'kanban']);
+    $todo = Section::create(['board_id' => $board->id, 'name' => 'To Do', 'order' => 0]);
+    Section::create(['board_id' => $board->id, 'name' => 'Done', 'order' => 1]);
+    $backlog = Section::create(['board_id' => $board->id, 'name' => 'Backlog', 'order' => 2]);
+
+    // A card already on the board, plus two parked in the reserved backlog section.
+    Card::create(['board_id' => $board->id, 'section_id' => $todo->id, 'name' => 'On board', 'description' => '', 'position' => 0]);
+    $parkedA = Card::create(['board_id' => $board->id, 'section_id' => $backlog->id, 'name' => 'Parked A', 'description' => '', 'position' => 0]);
+    $parkedB = Card::create(['board_id' => $board->id, 'section_id' => $backlog->id, 'name' => 'Parked B', 'description' => '', 'position' => 1]);
+
+    $this->actingAs($user)
+        ->putJson("/api/boards/{$board->id}", ['type' => 'scrum'])
+        ->assertOk()
+        ->assertJsonFragment(['type' => 'scrum']);
+
+    // Both land in the leftmost real column with no sprint, appended after the
+    // existing card, so they show up in the sprint-planning product backlog.
+    $a = $parkedA->refresh();
+    $b = $parkedB->refresh();
+    expect($a->section_id)->toBe($todo->id)
+        ->and($a->sprint_id)->toBeNull()
+        ->and($b->section_id)->toBe($todo->id)
+        ->and($b->sprint_id)->toBeNull()
+        ->and([$a->position, $b->position])->toBe([1, 2])
+        ->and(Card::where('section_id', $backlog->id)->count())->toBe(0);
+});
+
+it('leaves the reserved backlog alone when the board stays non-scrum', function () {
+    $user = User::factory()->create();
+    $board = Board::create(['user_id' => $user->id, 'name' => 'Work', 'description' => '', 'type' => 'kanban']);
+    Section::create(['board_id' => $board->id, 'name' => 'To Do', 'order' => 0]);
+    $backlog = Section::create(['board_id' => $board->id, 'name' => 'Backlog', 'order' => 1]);
+    $parked = Card::create(['board_id' => $board->id, 'section_id' => $backlog->id, 'name' => 'Parked', 'description' => '', 'position' => 0]);
+
+    // A rename touches update() but is not a conversion — nothing should move.
+    $this->actingAs($user)
+        ->putJson("/api/boards/{$board->id}", ['name' => 'Renamed'])
+        ->assertOk();
+
+    expect($parked->refresh()->section_id)->toBe($backlog->id);
+});
+
+it('keeps reserved-backlog cards put when scrum conversion has no real column to land in', function () {
+    $user = User::factory()->create();
+    $board = Board::create(['user_id' => $user->id, 'name' => 'Work', 'description' => '', 'type' => 'kanban']);
+    $backlog = Section::create(['board_id' => $board->id, 'name' => 'Backlog', 'order' => 0]);
+    $parked = Card::create(['board_id' => $board->id, 'section_id' => $backlog->id, 'name' => 'Parked', 'description' => '', 'position' => 0]);
+
+    $this->actingAs($user)
+        ->putJson("/api/boards/{$board->id}", ['type' => 'scrum'])
+        ->assertOk();
+
+    expect($parked->refresh()->section_id)->toBe($backlog->id);
+});

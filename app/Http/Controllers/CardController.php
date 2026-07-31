@@ -335,7 +335,15 @@ class CardController extends Controller
                 ),
                 $updatedCards,
             );
-            broadcast(new BoardEvent($boardId, 'cards.reordered', ['cards' => array_values($entries)]));
+            // Chunk the broadcast: Pusher hard-rejects any message over 10KB
+            // ("Payload too large"), and a big column reorder (e.g. 73 cards, each
+            // ~160-320B with two ISO timestamps + an optional loss_reason) blows
+            // past that in a single message. The client merges 'cards.reordered'
+            // per-id (see applyBoardEvent in useBoardRealtime), so a subset per
+            // message converges identically — 25 keeps us under the cap worst-case.
+            foreach (array_chunk(array_values($entries), 25) as $chunk) {
+                broadcast(new BoardEvent($boardId, 'cards.reordered', ['cards' => $chunk]));
+            }
         }
 
         // Any moved subtasks may have crossed the done line — refresh their epics' rollups.

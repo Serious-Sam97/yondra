@@ -50,6 +50,44 @@ it('broadcasts exactly one cards.reordered event for a multi-card reorder', func
     expect(Event::dispatched(BoardEvent::class, fn (BoardEvent $e) => $e->type === 'card.updated'))->toHaveCount(0);
 });
 
+it('chunks a large reorder into multiple messages under the Pusher 10KB cap', function () {
+    Event::fake([BoardEvent::class]);
+
+    $user = User::factory()->create();
+    $board = Board::create(['user_id' => $user->id, 'name' => 'Board', 'description' => '']);
+    $todo = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
+    $doing = Section::create(['board_id' => $board->id, 'name' => 'Doing']);
+
+    // 60 cards in Doing, all dragged into To Do at once — one message would be
+    // ~10KB+ and Pusher rejects it ("Payload too large"). Expect it chunked (25/msg).
+    $ids = [];
+    foreach (range(0, 59) as $i) {
+        $ids[] = Card::create([
+            'board_id' => $board->id, 'section_id' => $doing->id,
+            'name' => "C{$i}", 'description' => '', 'position' => $i,
+        ])->id;
+    }
+
+    $this->actingAs($user)
+        ->putJson("/api/boards/{$board->id}/cards/reorder", [
+            'section_id' => $todo->id,
+            'ordered_ids' => $ids,
+        ])
+        ->assertOk();
+
+    $events = Event::dispatched(BoardEvent::class, fn (BoardEvent $e) => $e->type === 'cards.reordered');
+    expect($events)->toHaveCount(3); // 60 cards / 25 per chunk = 3 messages
+
+    // Every card is covered exactly once across the chunks — no drops, no dupes.
+    $allIds = collect($events)->flatMap(fn ($e) => collect($e[0]->payload['cards'])->pluck('id'));
+    expect($allIds->count())->toBe(60);
+    expect($allIds->sort()->values()->all())->toBe(collect($ids)->sort()->values()->all());
+    // Each message stays well under the 10KB serialized cap.
+    foreach ($events as $e) {
+        expect(strlen(json_encode($e[0]->payload)))->toBeLessThan(10240);
+    }
+});
+
 it('broadcasts exactly one cards.sprint_changed event when completing a sprint', function () {
     Event::fake([BoardEvent::class]);
 

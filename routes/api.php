@@ -100,6 +100,9 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     Route::put('/user', [AuthController::class, 'updateProfile']);
     Route::put('/user/password', [AuthController::class, 'updatePassword']);
+    // LGPD data-subject rights: export everything the account owns, or erase it.
+    Route::get('/user/export', [AuthController::class, 'exportData']);
+    Route::delete('/user', [AuthController::class, 'destroyAccount']);
 
     Route::get('/dashboard', [DashboardController::class, 'index']);
     Route::get('/reports/revenue', [ReportController::class, 'revenue']);

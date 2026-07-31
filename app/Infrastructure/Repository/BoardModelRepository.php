@@ -122,6 +122,9 @@ class BoardModelRepository implements BoardRepository
         $board = Board::findOrFail($request['id']);
         $this->authorizeOwner($board);
 
+        // Captured before the write so a type conversion can rehome cards afterwards.
+        $previousType = $board->type;
+
         // Moving to a different project appends the board to the end of that
         // project's ordered board list (YON-125); a project-less board resets to 0.
         $targetPosition = $board->position;
@@ -225,7 +228,61 @@ class BoardModelRepository implements BoardRepository
         }
         $board->save();
 
+        // Switching a kanban/CRM board to scrum strands anything parked in the
+        // reserved backlog section — drain it into the sprint pool instead.
+        if ($previousType !== 'scrum' && $board->type === 'scrum') {
+            $this->drainReservedBacklogIntoSprintPool($board);
+        }
+
         return $board->fresh()->load(['owner:id,name', 'sharedWith:id,name'])->loadCount('cards');
+    }
+
+    /**
+     * Rehome tickets parked in the reserved "Backlog" section into the null-sprint
+     * product backlog when a board becomes scrum.
+     *
+     * The reserved section is a non-scrum mechanism: scrum views filter it out, and the
+     * scrum kanban shows the active sprint only. A ticket left in it after the switch is
+     * invisible in BOTH the board and the sprint-planning backlog — the same stranding
+     * the 2026_07_12_000004 migration recovered for boards that were already scrum.
+     */
+    private function drainReservedBacklogIntoSprintPool(Board $board): void
+    {
+        $backlog = Section::where('board_id', $board->id)
+            ->where('name', Section::RESERVED_BACKLOG)
+            ->first();
+
+        if (! $backlog) {
+            return;
+        }
+
+        // Leftmost real column to land the tickets in; without one there is nothing
+        // safe to do, so leave the cards where they are rather than lose their column.
+        $target = Section::where('board_id', $board->id)
+            ->where('name', '!=', Section::RESERVED_BACKLOG)
+            ->orderBy('order')
+            ->orderBy('id')
+            ->first();
+
+        if (! $target) {
+            return;
+        }
+
+        // Append after whatever already lives in the target column.
+        $position = (int) Card::where('section_id', $target->id)->max('position');
+
+        $stranded = Card::where('section_id', $backlog->id)
+            ->orderBy('position')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($stranded as $card) {
+            $card->update([
+                'section_id' => $target->id,
+                'sprint_id' => null,
+                'position' => ++$position,
+            ]);
+        }
     }
 
     public function setArchived(int $id, bool $archived)

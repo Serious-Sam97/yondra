@@ -199,12 +199,16 @@ class SprintController extends Controller
         // sprint_id changed and every mover got the same target, so no re-query needed.
         // Stale clients listening only for 'card.updated' won't converge until refreshed.
         if (! empty($movedIds)) {
-            broadcast(new BoardEvent($boardId, 'cards.sprint_changed', [
-                'cards' => array_map(
-                    fn ($cardId) => ['id' => $cardId, 'sprint_id' => $targetSprintId],
-                    $movedIds,
-                ),
-            ]));
+            $entries = array_map(
+                fn ($cardId) => ['id' => $cardId, 'sprint_id' => $targetSprintId],
+                $movedIds,
+            );
+            // Chunk to stay under Pusher's 10KB-per-message cap on very large sprints
+            // (see the same guard in CardController::reorder). The client merges
+            // 'cards.sprint_changed' per-id, so a subset per message converges.
+            foreach (array_chunk($entries, 200) as $chunk) {
+                broadcast(new BoardEvent($boardId, 'cards.sprint_changed', ['cards' => $chunk]));
+            }
         }
 
         return response()->json([
