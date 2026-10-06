@@ -158,7 +158,12 @@ class BoardModelRepository implements BoardRepository
             'ticket_prefix' => array_key_exists('ticket_prefix', $request)
                                 ? $request['ticket_prefix']
                                 : $board->ticket_prefix,
-            'next_ticket_number' => $request['next_ticket_number'] ?? $board->next_ticket_number,
+            // Never rewind below an issued number: the settings form always posts
+            // its (possibly stale) counter, and (board_id, ticket_number) is unique.
+            'next_ticket_number' => max(
+                $request['next_ticket_number'] ?? $board->next_ticket_number,
+                (int) Card::where('board_id', $board->id)->max('ticket_number') + 1,
+            ),
             'background' => array_key_exists('background', $request)
                                 ? $request['background']
                                 : $board->background,

@@ -25,8 +25,13 @@ class CardModelRepository implements CardRepository
         return DB::transaction(function () use ($request) {
             // Lock the board row so concurrent creates each get a distinct number.
             $board = Board::whereKey($request['board_id'])->lockForUpdate()->firstOrFail();
-            $ticketNumber = $board->next_ticket_number;
-            $board->increment('next_ticket_number');
+            // Self-heal a counter that fell behind the issued numbers (e.g. rewound
+            // via board settings) instead of colliding on the unique index.
+            $ticketNumber = max(
+                (int) $board->next_ticket_number,
+                (int) Card::where('board_id', $board->id)->max('ticket_number') + 1,
+            );
+            $board->update(['next_ticket_number' => $ticketNumber + 1]);
 
             $position = Card::where('section_id', $request['section_id'])->max('position') + 1;
             $card = Card::create([

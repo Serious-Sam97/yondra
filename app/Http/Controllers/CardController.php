@@ -27,6 +27,15 @@ use Illuminate\Validation\Rule;
 
 class CardController extends Controller
 {
+    /**
+     * Cards per `cards.reordered` frame — see the chunking note in reorder().
+     * Sized off the worst-case entry, not the typical one: a lost card carries two
+     * ISO timestamps plus a loss_reason (a string, validated to 120 chars) and runs
+     * ~320 B, where a plain card is ~160 B. 25 keeps even an all-lost chunk near
+     * 8 KB, so reorders survive on a stock-config Reverb / Pusher 10 KB cap.
+     */
+    private const REORDER_BROADCAST_CHUNK = 25;
+
     public CardService $cardService;
 
     public QualityGate $qualityGate;
@@ -328,6 +337,11 @@ class CardController extends Controller
         // Sliced from toArray() so serialization matches the old card.updated payloads.
         // Stale clients (older Capacitor builds) that only listen for 'card.updated'
         // won't converge on reorder until refreshed — acceptable, single-developer app.
+        // Chunked, because "one event" has an upper bound: Reverb's HTTP publish
+        // endpoint 413s ("Payload too large") past REVERB_MAX_REQUEST_SIZE, and a
+        // 104-card column serialized to ~16.6 KB — well over the 10 KB default.
+        // The client merges per card id (applyBoardEvent 'cards.reordered'), so
+        // N chunks converge exactly like one event would.
         if (! empty($updatedCards)) {
             $entries = array_map(
                 fn ($card) => array_intersect_key(
@@ -336,13 +350,7 @@ class CardController extends Controller
                 ),
                 $updatedCards,
             );
-            // Chunk the broadcast: Pusher hard-rejects any message over 10KB
-            // ("Payload too large"), and a big column reorder (e.g. 73 cards, each
-            // ~160-320B with two ISO timestamps + an optional loss_reason) blows
-            // past that in a single message. The client merges 'cards.reordered'
-            // per-id (see applyBoardEvent in useBoardRealtime), so a subset per
-            // message converges identically — 25 keeps us under the cap worst-case.
-            foreach (array_chunk(array_values($entries), 25) as $chunk) {
+            foreach (array_chunk(array_values($entries), self::REORDER_BROADCAST_CHUNK) as $chunk) {
                 broadcast(new BoardEvent($boardId, 'cards.reordered', ['cards' => $chunk]));
             }
         }

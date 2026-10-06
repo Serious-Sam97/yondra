@@ -100,3 +100,36 @@ it('backfills existing cards by creation order per board', function () {
     expect($newer->fresh()->ticket_number)->toBe(2);
     expect(Board::find($board->id)->next_ticket_number)->toBe(3);
 });
+
+it('does not let board settings rewind the counter below issued numbers', function () {
+    $user = User::factory()->create();
+    [$board, $section] = makeBoardWithSection($user);
+
+    $this->actingAs($user);
+    $this->postJson("/api/boards/{$board->id}/cards", ['section_id' => $section->id, 'name' => 'One']);
+    $this->postJson("/api/boards/{$board->id}/cards", ['section_id' => $section->id, 'name' => 'Two']);
+
+    // A stale settings form posts the counter it loaded with.
+    $this->putJson("/api/boards/{$board->id}", ['next_ticket_number' => 1])->assertOk();
+    expect(Board::find($board->id)->next_ticket_number)->toBe(3);
+
+    // Raising it still works.
+    $this->putJson("/api/boards/{$board->id}", ['next_ticket_number' => 10])->assertOk();
+    expect(Board::find($board->id)->next_ticket_number)->toBe(10);
+});
+
+it('skips past issued numbers when the counter has fallen behind', function () {
+    $user = User::factory()->create();
+    [$board, $section] = makeBoardWithSection($user);
+
+    $this->actingAs($user);
+    $this->postJson("/api/boards/{$board->id}/cards", ['section_id' => $section->id, 'name' => 'One']);
+    $this->postJson("/api/boards/{$board->id}/cards", ['section_id' => $section->id, 'name' => 'Two']);
+    Board::whereKey($board->id)->update(['next_ticket_number' => 2]);
+
+    $created = $this->postJson("/api/boards/{$board->id}/cards", ['section_id' => $section->id, 'name' => 'Three'])
+        ->assertCreated()->json();
+
+    expect($created['ticket_number'])->toBe(3);
+    expect(Board::find($board->id)->next_ticket_number)->toBe(4);
+});

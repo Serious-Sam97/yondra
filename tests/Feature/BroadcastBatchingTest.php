@@ -50,44 +50,6 @@ it('broadcasts exactly one cards.reordered event for a multi-card reorder', func
     expect(Event::dispatched(BoardEvent::class, fn (BoardEvent $e) => $e->type === 'card.updated'))->toHaveCount(0);
 });
 
-it('chunks a large reorder into multiple messages under the Pusher 10KB cap', function () {
-    Event::fake([BoardEvent::class]);
-
-    $user = User::factory()->create();
-    $board = Board::create(['user_id' => $user->id, 'name' => 'Board', 'description' => '']);
-    $todo = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
-    $doing = Section::create(['board_id' => $board->id, 'name' => 'Doing']);
-
-    // 60 cards in Doing, all dragged into To Do at once — one message would be
-    // ~10KB+ and Pusher rejects it ("Payload too large"). Expect it chunked (25/msg).
-    $ids = [];
-    foreach (range(0, 59) as $i) {
-        $ids[] = Card::create([
-            'board_id' => $board->id, 'section_id' => $doing->id,
-            'name' => "C{$i}", 'description' => '', 'position' => $i,
-        ])->id;
-    }
-
-    $this->actingAs($user)
-        ->putJson("/api/boards/{$board->id}/cards/reorder", [
-            'section_id' => $todo->id,
-            'ordered_ids' => $ids,
-        ])
-        ->assertOk();
-
-    $events = Event::dispatched(BoardEvent::class, fn (BoardEvent $e) => $e->type === 'cards.reordered');
-    expect($events)->toHaveCount(3); // 60 cards / 25 per chunk = 3 messages
-
-    // Every card is covered exactly once across the chunks — no drops, no dupes.
-    $allIds = collect($events)->flatMap(fn ($e) => collect($e[0]->payload['cards'])->pluck('id'));
-    expect($allIds->count())->toBe(60);
-    expect($allIds->sort()->values()->all())->toBe(collect($ids)->sort()->values()->all());
-    // Each message stays well under the 10KB serialized cap.
-    foreach ($events as $e) {
-        expect(strlen(json_encode($e[0]->payload)))->toBeLessThan(10240);
-    }
-});
-
 it('broadcasts exactly one cards.sprint_changed event when completing a sprint', function () {
     Event::fake([BoardEvent::class]);
 
@@ -112,4 +74,50 @@ it('broadcasts exactly one cards.sprint_changed event when completing a sprint',
 
     // The old per-card card.updated fan-out is gone.
     expect(Event::dispatched(BoardEvent::class, fn (BoardEvent $e) => $e->type === 'card.updated'))->toHaveCount(0);
+});
+
+/**
+ * The batched frame still has a ceiling: Reverb's HTTP publish endpoint returns
+ * 413 "Payload too large" past REVERB_MAX_REQUEST_SIZE, which surfaces as
+ * `BroadcastException: Pusher error: Payload too large.`. A 104-card column
+ * serialized to ~16.6 KB and tripped the 10 KB default, so reorder() chunks.
+ */
+it('chunks cards.reordered so no frame can outgrow the broadcaster limit', function () {
+    Event::fake([BoardEvent::class]);
+
+    $user = User::factory()->create();
+    $board = Board::create(['user_id' => $user->id, 'name' => 'Big', 'description' => '']);
+    $todo = Section::create(['board_id' => $board->id, 'name' => 'To Do']);
+
+    // 95 cards — past three chunks of 25, so the short tail chunk is exercised too.
+    $ids = collect(range(1, 95))->map(fn ($i) => Card::create([
+        'board_id' => $board->id, 'section_id' => $todo->id,
+        'name' => "Card {$i}", 'description' => '', 'position' => $i - 1,
+    ])->id)->all();
+
+    $this->actingAs($user)
+        ->putJson("/api/boards/{$board->id}/cards/reorder", [
+            'section_id' => $todo->id,
+            'ordered_ids' => array_reverse($ids),
+        ])
+        ->assertOk();
+
+    $events = Event::dispatched(BoardEvent::class, fn (BoardEvent $e) => $e->type === 'cards.reordered');
+    expect($events)->toHaveCount(4); // 25 + 25 + 25 + 20
+
+    // Every frame fits the stock 10 KB budget, measured the way Reverb measures it:
+    // the JSON request body, with `data` carried as a stringified field.
+    foreach ($events as $event) {
+        $data = json_encode($event[0]->payload);
+        $body = json_encode(['name' => 'board.event', 'data' => $data, 'channels' => ['private-board.'.$board->id]]);
+        expect(strlen($body))->toBeLessThan(10_000);
+    }
+
+    // Chunking must not lose or duplicate a card: the union is the full reorder,
+    // and each entry still carries the fields the client merges on.
+    $all = collect($events)->flatMap(fn ($e) => $e[0]->payload['cards']);
+    expect($all)->toHaveCount(95);
+    expect($all->pluck('id')->all())->toBe(array_reverse($ids));
+    expect($all->pluck('position')->all())->toBe(range(0, 94));
+    expect($all->first())->toHaveKeys(['id', 'section_id', 'position', 'done_at', 'section_entered_at']);
 });
