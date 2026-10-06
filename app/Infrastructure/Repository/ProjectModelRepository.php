@@ -11,6 +11,8 @@ use App\Infrastructure\Models\Project;
 use App\Infrastructure\Models\Section;
 use App\Infrastructure\Models\Tag;
 use App\Infrastructure\Models\User;
+use App\Support\Throughput;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -106,6 +108,10 @@ class ProjectModelRepository implements ProjectRepository
         // Real card totals + To Do/Doing/Done flow for every board shown.
         $this->attachFlow($project->boards->merge($archived));
 
+        // Completed-per-day series for the project deck's throughput readout,
+        // scoped to the boards this user can actually see.
+        $project->throughput = Throughput::lastDays($project->boards->pluck('id'), Carbon::today());
+
         // Expose the current user's manage capability so the client can gate the
         // settings page without re-deriving the (co-owner-aware) rules.
         $project->can_manage = $isOwner;
@@ -145,7 +151,13 @@ class ProjectModelRepository implements ProjectRepository
             : $scoped()->whereNull('done_at')->whereIn('section_id', array_values($firstSectionIds))
                 ->selectRaw('board_id, count(*) as c')->groupBy('board_id')->pluck('c', 'board_id');
 
+        // Newest card touch per board: boards.updated_at doesn't move when cards
+        // change, so this is what drives the client's "recording" (live) lamp.
+        $lastActivity = $scoped()->selectRaw('board_id, max(updated_at) as t')->groupBy('board_id')->pluck('t', 'board_id');
+
         foreach ($boards as $b) {
+            $last = $lastActivity[$b->id] ?? null;
+            $b->last_activity_at = $last ? Carbon::parse($last)->toIso8601String() : null;
             $t = (int) ($total[$b->id] ?? 0);
             $d = (int) ($done[$b->id] ?? 0);
             $td = (int) ($todo[$b->id] ?? 0);

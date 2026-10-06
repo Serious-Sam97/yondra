@@ -10,6 +10,7 @@ use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\CardLink;
 use App\Infrastructure\Models\Sprint;
 use App\Services\ProjectService;
+use App\Support\Throughput;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -43,7 +44,7 @@ class DashboardModelRepository
         return [
             'vitals' => $this->vitals($boardIds, $userId, $today, (float) ($crm['open_total'] ?? 0)),
             'queue' => $this->queue($boardIds, $userId, $today),
-            'throughput' => $this->throughput($boardIds, $today),
+            'throughput' => Throughput::lastDays($boardIds, $today),
             'sprint' => $this->activeSprint($boardIds, $today),
             'crm' => $crm,
             'prs' => $this->pullRequests($boardIds),
@@ -131,25 +132,6 @@ class DashboardModelRepository
     }
 
     /** Completed cards per day across the last 14 days (oldest -> newest). */
-    private function throughput(Collection $boardIds, Carbon $today): array
-    {
-        $start = $today->copy()->subDays(13);
-        $buckets = array_fill(0, 14, 0);
-
-        Card::whereIn('board_id', $boardIds)
-            ->whereNotNull('done_at')
-            ->where('done_at', '>=', $start)
-            ->pluck('done_at')
-            ->each(function ($doneAt) use (&$buckets, $start) {
-                $idx = $start->diffInDays($doneAt->copy()->startOfDay(), false);
-                if ($idx >= 0 && $idx < 14) {
-                    $buckets[(int) $idx]++;
-                }
-            });
-
-        return array_values($buckets);
-    }
-
     /** The single most-recent active sprint across visible boards. */
     private function activeSprint(Collection $boardIds, Carbon $today): ?array
     {
