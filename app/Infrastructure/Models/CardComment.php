@@ -2,10 +2,13 @@
 
 namespace App\Infrastructure\Models;
 
+use App\Observers\CardRelatedObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+#[ObservedBy([CardRelatedObserver::class])]
 class CardComment extends Model
 {
     protected $fillable = ['card_id', 'user_id', 'body', 'parent_id'];

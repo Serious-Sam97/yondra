@@ -2,11 +2,14 @@
 
 namespace App\Infrastructure\Models;
 
+use App\Observers\CardRelatedObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 
+#[ObservedBy([CardRelatedObserver::class])]
 class CardImage extends Model
 {
     protected $fillable = ['card_id', 'user_id', 'disk', 'path', 'original_name', 'mime_type', 'size', 'position'];

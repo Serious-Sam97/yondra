@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureVortexAdmin;
+use App\Http\Middleware\RecordCardHistory;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -24,7 +25,11 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'vortex.admin' => EnsureVortexAdmin::class,
+            'card.history' => RecordCardHistory::class,
         ]);
+
+        // Card History: batch each API request into one entry per card.
+        $middleware->api(append: [RecordCardHistory::class]);
 
         $middleware->group('web', [
             EnsureFrontendRequestsAreStateful::class,

@@ -2,6 +2,8 @@
 
 namespace App\Infrastructure\Models;
 
+use App\Observers\CardRelatedObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -13,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * This is a simplified invoice document, NOT a SEFAZ-registered fiscal NF-e.
  */
+#[ObservedBy([CardRelatedObserver::class])]
 class CardInvoice extends Model
 {
     protected $fillable = [

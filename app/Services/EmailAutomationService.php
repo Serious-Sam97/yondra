@@ -99,6 +99,13 @@ class EmailAutomationService
             $send->update(['status' => 'failed', 'error' => $e->getMessage()]);
             report($e);
         }
+
+        CardHistory::as('automation', fn () => CardHistory::record($card, 'automation.email', [], [
+            'subject' => $subject,
+            'to' => $contact->email,
+            'section' => $card->section?->name,
+            'status' => $send->status,
+        ]));
     }
 
     /**

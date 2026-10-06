@@ -8,6 +8,7 @@ use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\User;
 use App\Infrastructure\Models\WhatsappReengagementPolicy;
 use App\Notifications\LeadDroppedNotification;
+use App\Services\CardHistory;
 use App\Services\CardService;
 use App\Services\Notifier;
 use App\Services\WhatsappService;
@@ -64,16 +65,18 @@ class ReengageIdleLeads extends Command
                     if ($dry) {
                         $this->line("[dry] drop card {$card->id} (\"{$card->name}\")");
                     } else {
-                        if ($policy->lost_section_id) {
-                            // Reuse the normal move path so section_entered_at/events stay consistent.
-                            $cardService->edit([
-                                'id' => (int) $card->id,
-                                'board_id' => (int) $board->id,
-                                'section_id' => (int) $policy->lost_section_id,
-                            ]);
-                        } else {
-                            $card->update(['archived_at' => now()]);
-                        }
+                        CardHistory::as('automation', function () use ($policy, $cardService, $card, $board) {
+                            if ($policy->lost_section_id) {
+                                // Reuse the normal move path so section_entered_at/events stay consistent.
+                                $cardService->edit([
+                                    'id' => (int) $card->id,
+                                    'board_id' => (int) $board->id,
+                                    'section_id' => (int) $policy->lost_section_id,
+                                ]);
+                            } else {
+                                $card->update(['archived_at' => now()]);
+                            }
+                        }, 'reengagement');
                         $recipientId = $card->assigned_user_id ?: $board->user_id;
                         if ($recipient = User::find($recipientId)) {
                             $notifier->send($recipient, new LeadDroppedNotification(

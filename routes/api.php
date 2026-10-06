@@ -10,6 +10,7 @@ use App\Http\Controllers\CardChecklistController;
 use App\Http\Controllers\CardCommentController;
 use App\Http\Controllers\CardController;
 use App\Http\Controllers\CardDocumentController;
+use App\Http\Controllers\CardHistoryController;
 use App\Http\Controllers\CardImageController;
 use App\Http\Controllers\CardImportController;
 use App\Http\Controllers\CardInvoiceController;
@@ -18,12 +19,12 @@ use App\Http\Controllers\CardPaymentController;
 use App\Http\Controllers\CardTemplateController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmailAutomationController;
+use App\Http\Controllers\ErrorIngestController;
 use App\Http\Controllers\GifController;
 use App\Http\Controllers\GitHubWebhookController;
 use App\Http\Controllers\ImageUploadController;
 use App\Http\Controllers\ImportModelController;
 use App\Http\Controllers\IntakeConfirmationController;
-use App\Http\Controllers\ErrorIngestController;
 use App\Http\Controllers\IntakeWebhookController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NotificationPreferenceController;
@@ -59,18 +60,18 @@ Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->midd
 Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:auth');
 
 // Inbound GitHub webhooks — public, authenticated per-board via HMAC signature.
-Route::post('/webhooks/github/{boardId}', [GitHubWebhookController::class, 'handle']);
+Route::post('/webhooks/github/{boardId}', [GitHubWebhookController::class, 'handle'])->middleware('card.history:webhook,github');
 
 // Inbound WhatsApp Cloud API webhooks — public: GET verify handshake, POST HMAC-signed.
 Route::get('/webhooks/whatsapp/{boardId}', [WhatsappWebhookController::class, 'verify']);
-Route::post('/webhooks/whatsapp/{boardId}', [WhatsappWebhookController::class, 'handle']);
+Route::post('/webhooks/whatsapp/{boardId}', [WhatsappWebhookController::class, 'handle'])->middleware('card.history:webhook,whatsapp');
 
 // Inbound Sentinel CI results — public, authenticated by the case's unguessable ci_token.
-Route::post('/webhooks/qa-ci/{token}', [QaController::class, 'ciHook']);
+Route::post('/webhooks/qa-ci/{token}', [QaController::class, 'ciHook'])->middleware('card.history:ci');
 
 // Inbound form intake (JotForm → auto-create card) — public, authenticated by the
 // board's unguessable intake_token. Throttled: a form endpoint is a spam target.
-Route::post('/webhooks/intake/{token}', [IntakeWebhookController::class, 'handle'])->middleware('throttle:60,1');
+Route::post('/webhooks/intake/{token}', [IntakeWebhookController::class, 'handle'])->middleware(['throttle:60,1', 'card.history:webhook,intake']);
 
 // Public opt-in confirmation landing (YON-52) — a form submitter clicks this from
 // the confirmation email; the unguessable contact token is the credential. GET so
@@ -133,7 +134,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/boards/{boardId}/cards', [CardController::class, 'store']);
     // Bulk create cards from a custom JSON model (YON-121). Sits before the
     // {cardId} routes so "import" is never captured as a card id.
-    Route::post('/boards/{boardId}/cards/import', [CardImportController::class, 'store']);
+    Route::post('/boards/{boardId}/cards/import', [CardImportController::class, 'store'])->middleware('card.history:import');
     Route::get('/boards/{boardId}/cards/archived', [CardController::class, 'archived']);
     Route::put('/boards/{boardId}/cards/reorder', [CardController::class, 'reorder']);
     Route::put('/boards/{boardId}/cards/{cardId}', [CardController::class, 'update']);
@@ -145,6 +146,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/boards/{boardId}/cards/{cardId}/checklist/{itemId}', [CardChecklistController::class, 'destroy']);
 
     Route::get('/boards/{boardId}/cards/{cardId}/comments', [CardCommentController::class, 'index']);
+    Route::get('/boards/{boardId}/cards/{cardId}/history', [CardHistoryController::class, 'index']);
     Route::post('/boards/{boardId}/cards/{cardId}/comments', [CardCommentController::class, 'store']);
     Route::put('/boards/{boardId}/cards/{cardId}/comments/{commentId}', [CardCommentController::class, 'update']);
     Route::delete('/boards/{boardId}/cards/{cardId}/comments/{commentId}', [CardCommentController::class, 'destroy']);
@@ -203,7 +205,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/boards/{boardId}/cards/{cardId}/planning/vote', [PlanningController::class, 'vote']);
     Route::post('/boards/{boardId}/cards/{cardId}/planning/reveal', [PlanningController::class, 'reveal']);
     Route::post('/boards/{boardId}/cards/{cardId}/planning/reset', [PlanningController::class, 'reset']);
-    Route::post('/boards/{boardId}/cards/{cardId}/planning/apply', [PlanningController::class, 'apply']);
+    Route::post('/boards/{boardId}/cards/{cardId}/planning/apply', [PlanningController::class, 'apply'])->middleware('card.history:planning');
     Route::post('/boards/{boardId}/cards/{cardId}/planning/ping', [PlanningController::class, 'ping']);
     Route::post('/boards/{boardId}/cards/{cardId}/planning/timer', [PlanningController::class, 'timer']);
 

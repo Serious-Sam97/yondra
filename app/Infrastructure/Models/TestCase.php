@@ -2,11 +2,14 @@
 
 namespace App\Infrastructure\Models;
 
+use App\Observers\CardRelatedObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+#[ObservedBy([CardRelatedObserver::class])]
 class TestCase extends Model
 {
     protected $fillable = [

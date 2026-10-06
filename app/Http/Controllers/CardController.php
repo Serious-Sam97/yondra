@@ -14,6 +14,7 @@ use App\Infrastructure\Models\User;
 use App\Notifications\CardAssignedNotification;
 use App\Notifications\CardStatusNotification;
 use App\Rules\AssignableBoardMember;
+use App\Services\CardHistory;
 use App\Services\CardService;
 use App\Services\LossReasonGate;
 use App\Services\Notifier;
@@ -466,18 +467,25 @@ class CardController extends Controller
         $email = trim((string) ($contact['email'] ?? ''));
         $phone = trim((string) ($contact['phone'] ?? ''));
 
-        if ($name === '' && $email === '' && $phone === '') {
-            if ($card->contact_id !== null) {
-                $card->update(['contact_id' => null]);
-            }
-
-            return;
-        }
-
         // Reuse the linked contact if there is one; otherwise mint a board-scoped one.
         $model = $card->contact_id
             ? Contact::where('board_id', $board->id)->find($card->contact_id)
             : null;
+        $before = [
+            'name' => $model?->name,
+            'email' => $model?->email,
+            'phone' => $model?->phone,
+        ];
+
+        if ($name === '' && $email === '' && $phone === '') {
+            if ($card->contact_id !== null) {
+                $card->update(['contact_id' => null]);
+            }
+            $this->recordContactChanges($card, $before, ['name' => null, 'email' => null, 'phone' => null]);
+
+            return;
+        }
+
         $model ??= new Contact(['board_id' => $board->id]);
 
         $model->board_id = $board->id;
@@ -488,6 +496,26 @@ class CardController extends Controller
 
         if ((int) $card->contact_id !== (int) $model->id) {
             $card->update(['contact_id' => $model->id]);
+        }
+        $this->recordContactChanges($card, $before, [
+            'name' => $model->name,
+            'email' => $model->email,
+            'phone' => $model->phone,
+        ]);
+    }
+
+    /** Contact edits live on another model, so the card's history gets them here. */
+    protected function recordContactChanges(Card $card, array $before, array $after): void
+    {
+        $changes = [];
+        foreach ($after as $field => $value) {
+            if ($before[$field] !== $value) {
+                $changes["contact.{$field}"] = ['from' => $before[$field], 'to' => $value];
+            }
+        }
+
+        if ($changes) {
+            CardHistory::record($card, 'card.updated', $changes);
         }
     }
 

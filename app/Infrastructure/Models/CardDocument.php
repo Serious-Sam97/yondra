@@ -2,6 +2,8 @@
 
 namespace App\Infrastructure\Models;
 
+use App\Observers\CardRelatedObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -11,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * URL — the client downloads them through an auth-gated route that re-checks
  * board access (see CardDocumentController::download).
  */
+#[ObservedBy([CardRelatedObserver::class])]
 class CardDocument extends Model
 {
     protected $fillable = ['card_id', 'user_id', 'disk', 'path', 'original_name', 'mime_type', 'size', 'position'];

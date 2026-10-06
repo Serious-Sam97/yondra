@@ -234,7 +234,13 @@ class WhatsappService
             return;
         }
 
-        $this->sendTemplateToCard($card, $automation->template_name, $automation->language, [], null);
+        $message = $this->sendTemplateToCard($card, $automation->template_name, $automation->language, [], null);
+
+        CardHistory::as('automation', fn () => CardHistory::record($card, 'automation.whatsapp', [], [
+            'template' => $automation->template_name,
+            'section' => Section::whereKey($sectionId)->value('name'),
+            'status' => $message->status === 'failed' ? 'failed' : 'sent',
+        ]));
     }
 
     /**

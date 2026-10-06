@@ -2,6 +2,8 @@
 
 namespace App\Infrastructure\Models;
 
+use App\Observers\CardRelatedObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -9,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * One payment received against a deal (YON-63). The card's total paid is the sum
  * of its payments; {@see PaymentService} caches that sum on cards.amount_paid.
  */
+#[ObservedBy([CardRelatedObserver::class])]
 class CardPayment extends Model
 {
     protected $fillable = [

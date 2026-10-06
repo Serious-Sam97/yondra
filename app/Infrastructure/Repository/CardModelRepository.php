@@ -8,6 +8,8 @@ use App\Domain\Repository\CardRepository;
 use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\Section;
+use App\Infrastructure\Models\Tag;
+use App\Services\CardHistory;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -108,11 +110,26 @@ class CardModelRepository implements CardRepository
         ]);
 
         if (array_key_exists('tag_ids', $request)) {
-            $card->tags()->sync($request['tag_ids'] ?? []);
+            $synced = $card->tags()->sync($request['tag_ids'] ?? []);
+            $this->recordTagChanges($card, $synced['attached'], $synced['detached']);
         }
 
         // ticket_key is appended by CardResource at the HTTP boundary.
         return $card->fresh()->load(['assignedUser:id,name', 'contact', 'createdBy:id,name', 'tags', 'images', 'links', 'documents']);
+    }
+
+    /** Pivot syncs bypass model observers, so tag edits are logged here. */
+    private function recordTagChanges(Card $card, array $attached, array $detached): void
+    {
+        if (! $attached && ! $detached) {
+            return;
+        }
+
+        $names = Tag::whereIn('id', [...$attached, ...$detached])->pluck('name', 'id');
+        CardHistory::record($card, 'card.updated', ['tags' => [
+            'added' => array_values(array_filter(array_map(fn ($id) => $names[$id] ?? null, $attached))),
+            'removed' => array_values(array_filter(array_map(fn ($id) => $names[$id] ?? null, $detached))),
+        ]]);
     }
 
     public function delete($request)
