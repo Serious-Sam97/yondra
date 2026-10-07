@@ -43,6 +43,7 @@ class Card extends Model
         'lost_at', 'loss_reason',
         'parent_card_id', 'is_done', 'ticket_number',
         'value', 'amount_paid', 'story_points', 'sprint_id', 'section_entered_at',
+        'blocked_at', 'blocked_reason',
     ];
 
     protected $casts = [
@@ -52,6 +53,7 @@ class Card extends Model
         'done_at' => 'datetime',
         'lost_at' => 'datetime',
         'section_entered_at' => 'datetime',
+        'blocked_at' => 'datetime',
         'is_done' => 'boolean',
         'value' => 'decimal:2',
         'amount_paid' => 'decimal:2',

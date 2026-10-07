@@ -112,6 +112,8 @@ class CardController extends Controller
             // A reason chosen from the board's loss_reasons list, required when this
             // update moves the deal into the Lost stage (YON-66).
             'loss_reason' => ['sometimes', 'nullable', 'string', 'max:120'],
+            // "Jammed": a non-empty reason blocks the card, null/empty unblocks it.
+            'blocked_reason' => ['sometimes', 'nullable', 'string', 'max:160'],
         ]);
 
         // Quality gate guards every path into the done column, not just drag reorder —

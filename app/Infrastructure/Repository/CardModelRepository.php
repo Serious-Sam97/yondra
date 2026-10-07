@@ -114,6 +114,15 @@ class CardModelRepository implements CardRepository
             'section_entered_at' => $sectionEnteredAt,
         ]);
 
+        // Jam / unjam: keep the original blocked_at while the card stays jammed.
+        if (array_key_exists('blocked_reason', $request)) {
+            $reason = trim((string) ($request['blocked_reason'] ?? ''));
+            $card->update([
+                'blocked_reason' => $reason !== '' ? $reason : null,
+                'blocked_at' => $reason !== '' ? ($card->blocked_at ?? now()) : null,
+            ]);
+        }
+
         if (array_key_exists('tag_ids', $request)) {
             $synced = $card->tags()->sync($request['tag_ids'] ?? []);
             $this->recordTagChanges($card, $synced['attached'], $synced['detached']);
