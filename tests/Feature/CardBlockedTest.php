@@ -2,6 +2,7 @@
 
 use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Card;
+use App\Infrastructure\Models\CardComment;
 use App\Infrastructure\Models\Section;
 use App\Infrastructure\Models\User;
 
@@ -45,4 +46,13 @@ it('leaves the jam untouched on unrelated updates', function () {
     $this->actingAs($user)->putJson("/api/boards/{$board->id}/cards/{$card->id}", ['name' => 'Renamed'])->assertOk();
 
     expect($card->fresh()->blocked_reason)->toBe('x');
+});
+
+it('includes comment counts on board cards', function () {
+    [$user, $board, $card] = jamFixture();
+    CardComment::create(['card_id' => $card->id, 'user_id' => $user->id, 'body' => 'hi']);
+
+    $cards = $this->actingAs($user)->getJson("/api/boards/{$board->id}")->assertOk()->json('cards');
+
+    expect($cards[0]['comments_count'])->toBe(1);
 });

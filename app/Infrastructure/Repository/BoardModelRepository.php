@@ -48,6 +48,8 @@ class BoardModelRepository implements BoardRepository
                     'subtasks as subtasks_count' => fn ($sq) => $sq->whereNull('archived_at'),
                     'subtasks as done_subtasks_count' => fn ($sq) => $sq->whereNull('archived_at')
                         ->where(fn ($w) => $w->whereNotNull('done_at')->orWhere('is_done', true)),
+                    // Footer readout on the board's card inserts.
+                    'comments as comments_count',
                 ])
                 ->orderBy('position'),
             'cards.assignedUser:id,name',
