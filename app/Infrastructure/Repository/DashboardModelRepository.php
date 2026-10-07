@@ -44,6 +44,7 @@ class DashboardModelRepository
         return [
             'vitals' => $this->vitals($boardIds, $userId, $today, (float) ($crm['open_total'] ?? 0)),
             'queue' => $this->queue($boardIds, $userId, $today),
+            'deck' => $this->deck($boardIds, $userId, $today),
             'throughput' => Throughput::lastDays($boardIds, $today),
             'sprint' => $this->activeSprint($boardIds, $today),
             'crm' => $crm,
@@ -131,7 +132,23 @@ class DashboardModelRepository
         ];
     }
 
-    /** Completed cards per day across the last 14 days (oldest -> newest). */
+    /**
+     * "On your deck": every open card assigned to the user, overdue first, then
+     * by due date (undated last), then ticket order. Capped for the cue sheet.
+     */
+    private function deck(Collection $boardIds, int $userId, Carbon $today): Collection
+    {
+        return $this->myOpenCards($boardIds, $userId)
+            ->sortBy([
+                fn ($a, $b) => ($b->due_date?->lt($today) ?? false) <=> ($a->due_date?->lt($today) ?? false),
+                fn ($a, $b) => ($a->due_date?->timestamp ?? PHP_INT_MAX) <=> ($b->due_date?->timestamp ?? PHP_INT_MAX),
+                fn ($a, $b) => (int) $a->ticket_number <=> (int) $b->ticket_number,
+            ])
+            ->take(8)
+            ->map(fn ($c) => $this->mapCard($c))
+            ->values();
+    }
+
     /** The single most-recent active sprint across visible boards. */
     private function activeSprint(Collection $boardIds, Carbon $today): ?array
     {
@@ -196,7 +213,18 @@ class DashboardModelRepository
             ->get();
 
         // Aggregate open value by stage name (merges same-named stages across boards).
+        // Every working stage gets a slot, even when empty, so the funnel always
+        // reads the board's full pipeline; terminal Won/Lost stages are left out.
         $stageMap = [];
+        foreach ($boards as $b) {
+            foreach ($b->sections as $s) {
+                // Seeded CRM boards end in an unconfigured "Won" column, so match it by name too.
+                if ($b->marksDone($s) || $b->marksLost($s) || strtolower((string) $s->name) === 'won') {
+                    continue;
+                }
+                $stageMap[$s->name] ??= ['name' => $s->name, 'value' => 0.0, 'count' => 0, 'order' => $s->order];
+            }
+        }
         foreach ($open as $c) {
             $meta = $sectionMeta[$c->section_id] ?? ['name' => 'Other', 'order' => 999];
             $name = $meta['name'];
@@ -360,6 +388,7 @@ class DashboardModelRepository
             'story_points' => $c->story_points,
             'value' => $c->value !== null ? (float) $c->value : null,
             'ticket_key' => Card::ticketKey($c->board?->ticket_prefix, $c->ticket_number),
+            'blocked_reason' => $c->blocked_reason,
         ];
     }
 }

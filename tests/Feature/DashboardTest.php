@@ -112,6 +112,33 @@ it('returns the aggregate dashboard payload', function () {
     expect($res->json('projects_meta.0.last_activity'))->not->toBeNull();
 });
 
+it('lists my open cards on the deck: overdue first, then by due date, undated last', function () {
+    $user = User::factory()->create();
+    ['board' => $board] = seedDashboard($user);
+    Card::where('name', 'Plain open')->update(['blocked_reason' => 'Waiting on legal']);
+
+    $res = $this->actingAs($user)->getJson('/api/dashboard')->assertOk();
+
+    expect(collect($res->json('deck'))->pluck('name')->all())
+        ->toBe(['Overdue task', 'Today task', 'Big rock', 'Plain open']);
+    expect($res->json('deck.3.blocked_reason'))->toBe('Waiting on legal');
+    expect($res->json('deck.0.section'))->toBe('To Do');
+});
+
+it('keeps empty working stages in the CRM funnel but leaves out won and lost', function () {
+    $user = User::factory()->create();
+    ['crm' => $crm] = seedDashboard($user);
+    Section::create(['board_id' => $crm->id, 'name' => 'Negotiation', 'order' => 2]);
+    $won = Section::create(['board_id' => $crm->id, 'name' => 'Won', 'order' => 3]);
+    Section::create(['board_id' => $crm->id, 'name' => 'Lost', 'order' => 4]);
+    $crm->update(['done_section_id' => $won->id]);
+
+    $res = $this->actingAs($user)->getJson('/api/dashboard')->assertOk();
+
+    expect(collect($res->json('crm.stages'))->pluck('name')->all())->toBe(['Lead', 'Proposal', 'Negotiation']);
+    expect($res->json('crm.stages.2.count'))->toBe(0);
+});
+
 it('strips the actor name from legacy activity descriptions', function () {
     $user = User::factory()->create();
     $board = Board::create(['user_id' => $user->id, 'name' => 'B', 'description' => '']);
