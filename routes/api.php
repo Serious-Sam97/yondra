@@ -40,6 +40,7 @@ use App\Http\Controllers\SprintController;
 use App\Http\Controllers\StepController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\TestPlanController;
+use App\Http\Controllers\VortexController;
 use App\Http\Controllers\WhatsappAutomationController;
 use App\Http\Controllers\WhatsappController;
 use App\Http\Controllers\WhatsappReengagementController;
@@ -136,6 +137,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // {cardId} routes so "import" is never captured as a card id.
     Route::post('/boards/{boardId}/cards/import', [CardImportController::class, 'store'])->middleware('card.history:import');
     Route::get('/boards/{boardId}/cards/archived', [CardController::class, 'archived']);
+
+    // Vortex mascot: notes for teammates + the comment "impression".
+    Route::post('/boards/{boardId}/vortex-notes', [VortexController::class, 'storeNote'])->middleware('throttle:30,1');
+    Route::get('/boards/{boardId}/vortex-notes', [VortexController::class, 'pendingNotes']);
+    Route::get('/boards/{boardId}/vortex-impressions', [VortexController::class, 'impressions']);
     Route::put('/boards/{boardId}/cards/reorder', [CardController::class, 'reorder']);
     Route::put('/boards/{boardId}/cards/{cardId}', [CardController::class, 'update']);
     Route::put('/boards/{boardId}/cards/{cardId}/restore', [CardController::class, 'restore']);
@@ -232,6 +238,9 @@ Route::middleware('auth:sanctum')->group(function () {
         // Vortex — the user-scoped workspace assistant (mascot chat). Multi-turn, streamed
         // over the caller's own private channel (scope:'vortex-chat'); no board in the URL.
         Route::post('/ai/vortex-chat', [AiAssistController::class, 'workspaceChat']);
+
+        // Vortex's daily tape horoscope — one cached line per user per day (synchronous).
+        Route::post('/ai/vortex-remark', [AiAssistController::class, 'vortexRemark']);
     });
 
     // Sentinel (QA) — N test cases per card, each with N runs (reports).

@@ -19,3 +19,13 @@ Broadcast::channel('project.{projectId}', function ($user, $projectId) {
 
     return $project && $project->isAccessibleBy($user->id);
 });
+
+// Presence for the Vortex mascot: who else is on this board right now, so each
+// visitor's Vortex can appear as a translucent ghost. Members see only id + name.
+Broadcast::channel('board-presence.{boardId}', function ($user, $boardId) {
+    $board = Board::find($boardId);
+
+    return $board && $board->isAccessibleBy($user->id)
+        ? ['id' => (int) $user->id, 'name' => (string) $user->name]
+        : false;
+});

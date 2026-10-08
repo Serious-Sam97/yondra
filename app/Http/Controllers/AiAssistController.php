@@ -11,6 +11,7 @@ use App\Jobs\GenerateWorkspaceChatJob;
 use App\Services\Ai\AiDriver;
 use App\Services\AiAssistService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -124,6 +125,30 @@ class AiAssistController extends Controller
     }
 
     /**
+     * Vortex's daily tape horoscope for the caller — one line, generated once per user
+     * per day (cached) so reloads don't burn LLM calls. Read-only.
+     */
+    public function vortexRemark(Request $request, AiDriver $ai, AiAssistService $service)
+    {
+        if (! $ai->isAvailable()) {
+            abort(503, 'AI assist is not configured.');
+        }
+        $userId = (int) $request->user()->id;
+        $key = 'vortex-remark:'.$userId.':'.now()->toDateString();
+
+        try {
+            $text = Cache::remember($key, now()->endOfDay(), fn () => $service->vortexRemark($userId));
+        } catch (\DomainException $e) {
+            abort(422, $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::warning('Vortex remark failed', ['user' => $userId, 'error' => $e->getMessage()]);
+            abort(502, 'Vortex is not talking right now.');
+        }
+
+        return response()->json(['text' => $text]);
+    }
+
+    /**
      * Kick off a board-level standup / sprint summary. Board-scoped and streamed (frames
      * carry scope:'board'), so it runs off the request thread like the card actions.
      */
@@ -205,6 +230,9 @@ class AiAssistController extends Controller
             'mounts' => ['sometimes', 'array', 'max:6'],
             'mounts.*.type' => ['required', 'string', 'in:project,board'],
             'mounts.*.id' => ['required', 'integer', 'min:1'],
+            // Tone/command keys from a fixed whitelist — the server owns the wording.
+            'style' => ['sometimes', 'array', 'max:3'],
+            'style.*' => ['string', 'in:'.implode(',', AiAssistService::VORTEX_STYLES)],
         ]);
         $requestId = $validated['request_id'] ?? (string) Str::uuid();
         $userId = (int) $request->user()->id;
@@ -224,7 +252,7 @@ class AiAssistController extends Controller
             $validated['messages'],
         );
 
-        GenerateWorkspaceChatJob::dispatch($userId, $requestId, array_values($messages), $mounts);
+        GenerateWorkspaceChatJob::dispatch($userId, $requestId, array_values($messages), $mounts, array_values(array_unique($validated['style'] ?? [])));
 
         return response()->json(['request_id' => $requestId], 202);
     }

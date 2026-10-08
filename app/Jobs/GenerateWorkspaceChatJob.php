@@ -25,16 +25,18 @@ class GenerateWorkspaceChatJob implements ShouldQueue
      * @param  list<array{role:string,content:string}>  $messages
      * @param  list<array{type:string,id:int}>  $mounts  Contexts the user mounted
      *                                                   (authorization-checked by the controller).
+     * @param  list<string>  $style  Whitelisted tone/command keys (AiAssistService::VORTEX_STYLES).
      */
     public function __construct(
         public readonly int $userId,
         public readonly string $requestId,
         public readonly array $messages,
         public readonly array $mounts = [],
+        public readonly array $style = [],
     ) {}
 
     public function handle(AiAssistService $ai): void
     {
-        $ai->streamWorkspaceChat($this->userId, $this->requestId, $this->messages, $this->mounts);
+        $ai->streamWorkspaceChat($this->userId, $this->requestId, $this->messages, $this->mounts, $this->style);
     }
 }
