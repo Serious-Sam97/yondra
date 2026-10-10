@@ -92,14 +92,21 @@ class YutopiaInternalController extends Controller
 
     // Builders edited the map (walls, floors, rooms, size). The world-server has
     // already applied the shared rules; this is the storage-side shape check.
+    // Map v2 keeps walls on tile edges (hWalls: height + 1 rows of width chars,
+    // vWalls: height rows of width + 1); v1 layouts had "#" wall tiles.
     public function layout(Request $request, int $spaceId): JsonResponse
     {
         $this->verify($request);
         $data = $request->validate([
+            'version' => ['nullable', 'integer', 'in:2'],
             'width' => ['required', 'integer', 'between:16,96'],
             'height' => ['required', 'integer', 'between:16,96'],
             'tiles' => ['required', 'array'],
             'tiles.*' => ['string', 'regex:/^[#\\ .,_:~x]*$/'],
+            'hWalls' => ['nullable', 'array', 'required_with:vWalls'],
+            'hWalls.*' => ['string', 'regex:/^[.pwfbkgPWFBKh]*$/'],
+            'vWalls' => ['nullable', 'array', 'required_with:hWalls'],
+            'vWalls.*' => ['string', 'regex:/^[.pwfbkgPWFBKh]*$/'],
             'spawn' => ['required', 'array'],
             'spawn.x' => ['required', 'numeric', 'min:0'],
             'spawn.y' => ['required', 'numeric', 'min:0'],
@@ -118,6 +125,19 @@ class YutopiaInternalController extends Controller
         abort_unless(count($data['tiles']) === $data['height'], 422, 'tiles must have one row per height');
         foreach ($data['tiles'] as $row) {
             abort_unless(strlen($row) === $data['width'], 422, 'every row must be width long');
+        }
+        if (isset($data['hWalls'])) {
+            abort_unless(count($data['hWalls']) === $data['height'] + 1, 422, 'hWalls must have height + 1 rows');
+            abort_unless(count($data['vWalls']) === $data['height'], 422, 'vWalls must have one row per height');
+            foreach ($data['hWalls'] as $row) {
+                abort_unless(strlen($row) === $data['width'], 422, 'every hWalls row must be width long');
+            }
+            foreach ($data['vWalls'] as $row) {
+                abort_unless(strlen($row) === $data['width'] + 1, 422, 'every vWalls row must be width + 1 long');
+            }
+            foreach ($data['tiles'] as $row) {
+                abort_if(str_contains($row, '#'), 422, 'v2 layouts keep walls on edges, not tiles');
+            }
         }
         $space = YutopiaSpace::findOrFail($spaceId);
         $space->update(['layout' => $data]);

@@ -275,6 +275,16 @@ it('stores a validated map layout and lists who can own rooms', function () {
     internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['tiles' => array_fill(0, 15, $row)] + $layout)->assertStatus(422);
     $this->putJson("/api/internal/yutopia/spaces/{$space->id}/layout", $layout)->assertUnauthorized();
 
+    // map v2: walls on tile edges
+    $v2 = ['version' => 2, 'hWalls' => array_fill(0, 17, str_repeat('p', 16)), 'vWalls' => array_fill(0, 16, 'p'.str_repeat('.', 15).'W')] + $layout;
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", $v2)->assertOk();
+    expect($space->fresh()->layout['hWalls'])->toHaveCount(17)
+        ->and($space->fresh()->layout['vWalls'][0])->toBe('p'.str_repeat('.', 15).'W');
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['hWalls' => array_fill(0, 16, str_repeat('p', 16))] + $v2)->assertStatus(422);
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['vWalls' => array_fill(0, 16, str_repeat('Z', 17))] + $v2)->assertUnprocessable();
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['tiles' => array_fill(0, 16, '#'.str_repeat('.', 15))] + $v2)->assertStatus(422);
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['hWalls' => null] + $v2)->assertUnprocessable();
+
     $this->actingAs($bia)->getJson("/api/yutopia/spaces/{$space->id}/members")
         ->assertOk()->assertJsonPath('members.0.name', 'Ana')->assertJsonPath('members.1.name', 'Bia');
     $this->actingAs(User::factory()->create())->getJson("/api/yutopia/spaces/{$space->id}/members")->assertNotFound();
