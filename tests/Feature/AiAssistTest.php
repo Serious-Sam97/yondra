@@ -1,5 +1,6 @@
 <?php
 
+use App\Events\UserEvent;
 use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\CardChecklistItem;
@@ -17,6 +18,7 @@ use App\Jobs\GenerateCrmChatJob;
 use App\Jobs\GenerateWorkspaceChatJob;
 use App\Services\AiAssistService;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 
 function aiCard(User $owner): array
@@ -748,4 +750,25 @@ it('rewrite: errors gracefully when there is nothing to rewrite', function () {
     app(AiAssistService::class)->run($board->id, $card->id, 'req', 'rewrite', []);
 
     Http::assertNothingSent();
+});
+
+it('vortex-chat never broadcasts a blank reply (ACTION-only or empty answers)', function () {
+    configureAnthropic();
+    Event::fake([UserEvent::class]);
+    $owner = User::factory()->create();
+    aiCard($owner);
+
+    foreach ([
+        ['ACTION:{"kind":"create_board","name":"Ops","type":"kanban"}', AiAssistService::VORTEX_EMPTY_ACTION],
+        ['   ', AiAssistService::VORTEX_EMPTY_REPLY],
+    ] as [$reply, $expected]) {
+        Http::fake(['api.anthropic.com/*' => Http::response(aiSse([$reply]), 200)]);
+        app(AiAssistService::class)->streamWorkspaceChat($owner->id, 'req-'.md5($reply), [
+            ['role' => 'user', 'content' => 'make a board'],
+        ]);
+        Event::assertDispatched(
+            UserEvent::class,
+            fn ($e) => $e->type === 'ai.done' && $e->payload['request_id'] === 'req-'.md5($reply) && $e->payload['text'] === $expected,
+        );
+    }
 });

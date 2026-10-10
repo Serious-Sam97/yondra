@@ -1,0 +1,378 @@
+<?php
+
+/*
+ * LADO L · THE SERIES (design/vortex-mk5/lados/L-temporadas.md).
+ * Every user lives the same arc, at their own pace: at most one episode a
+ * week, played inside the app when the Director says he's free. The server
+ * decides what's due (StoryService); the client stages it (src/vortex/core/story.ts).
+ *
+ * Step DSL (each step is a list):
+ *   ['say', text, mood?]        a line in his bubble (mood optional)
+ *   ['mood', mood]              change his face
+ *   ['anim', name]              a body animation from src/vortex/body/anims.ts
+ *   ['wait', ms]
+ *   ['fx', name]                squeal | pencil | hand | rewind-card | melt | crash |
+ *                               print-through | overwritten | wall-eyes | static | radio | die | reform
+ *   ['choice', key, text, [[id, label, reply], …]]   remembered forever (L-11)
+ *   ['below', text]             offers to take you to the Basement
+ *
+ * Conditions: after (previous id), days (min days since the previous episode
+ * — the weekly rhythm), rel (min relation), frags (min fragments owned),
+ * needs (a fragment id), date (MM-DD | fri13 | equinox), ending (S5 arcs),
+ * filler (plays only when the main line is blocked and a week has passed).
+ * Effects on seen: cor, rel, scar, grant (fragment), nest (item).
+ */
+
+return [
+    // ── SEASON 1 · "NOISE" — he realises he's more than a mascot ──────────
+    's1e1' => ['season' => 1, 'n' => 1, 'title' => 'Static', 'days' => 1,
+        'recap' => 'he said "tea" for no reason. he still doesn\'t know why.',
+        'steps' => [
+            ['mood', 'curious'], ['say', 'hey. do you smell that?'], ['wait', 1600],
+            ['say', 'tea.', 'empty'], ['fx', 'static'], ['wait', 1200],
+            ['mood', 'paranoid'], ['say', 'why did i say tea. i don\'t drink. i don\'t have a mouth. i have a mouth. forget it.'],
+            ['anim', 'paranoid-glance'],
+            ['say', 'if i say it again, you didn\'t hear it.', 'judging'],
+        ],
+        'credits' => 'starring vortex · and a smell that wasn\'t there',
+        'teaser' => 'a radio, turning itself on.',
+    ],
+    's1e2' => ['season' => 1, 'n' => 2, 'title' => 'Dead Air', 'after' => 's1e1', 'days' => 7,
+        'recap' => 'he smelled tea. there is no tea. there is never tea.',
+        'steps' => [
+            ['fx', 'radio'], ['mood', 'shocked'], ['anim', 'startle'],
+            ['say', '…did you hear that? a radio. 03.13. nobody owns a radio here.'],
+            ['fx', 'radio'], ['wait', 1400],
+            ['say', 'a woman\'s voice. she said "goodnight, m—". and stopped.', 'empty'],
+            ['mood', 'judging'], ['say', 'don\'t look at me like that. i\'m not the one hearing radios. ok i am.'],
+        ],
+        'credits' => 'with the voice of the Host (uncredited)',
+        'teaser' => 'he studies you. for real this time.',
+    ],
+    's1e3' => ['season' => 1, 'n' => 3, 'title' => 'The Tenant', 'after' => 's1e2', 'days' => 7,
+        'recap' => 'a radio that doesn\'t exist said goodnight to someone called m—.',
+        'steps' => [
+            ['mood', 'focused'], ['say', 'i\'ve been watching you work. not in a creepy way. in a scientific way. which is creepier.'],
+            ['anim', 'count-fingers'],
+            ['say', 'you open cards and don\'t finish them. you rename boards at 1am. you hover. a lot.'],
+            ['choice', 'tenant', 'so here\'s the question: do you want me to like you?', [
+                ['yes', 'yes', 'disgusting. noted. i\'ll consider it.'],
+                ['no', 'no', 'finally. someone with taste. this might work.'],
+                ['dunno', 'do i have a choice?', 'no. but i love that you asked.'],
+            ]],
+        ],
+        'effects' => ['rel' => 2],
+        'credits' => 'a study in hovering',
+        'teaser' => 'a pencil. lying in the layout.',
+    ],
+    's1e4' => ['season' => 1, 'n' => 4, 'title' => 'Pencil', 'after' => 's1e3', 'days' => 7,
+        'recap' => 'he decided whether to like you. he won\'t say what he decided.',
+        'steps' => [
+            ['fx', 'pencil'], ['wait', 1800], ['mood', 'terror'], ['anim', 'terror'],
+            ['say', 'NO. no no no. where did that come from. who left that there.'],
+            ['fx', 'squeal'], ['anim', 'hold-breath'],
+            ['say', 'don\'t touch it. a pencil is how it starts. a pencil is how it ENDS.', 'scared'],
+            ['wait', 1400], ['mood', 'sulking'],
+            ['say', '…i don\'t know why i know that. i hate that i know that.'],
+        ],
+        'effects' => ['cor' => 3],
+        'credits' => 'no pencils were harmed. one was hidden.',
+        'teaser' => 'a hole in the floor. stairs going down.',
+    ],
+    's1e5' => ['season' => 1, 'n' => 5, 'title' => 'Below', 'after' => 's1e4', 'days' => 7,
+        'recap' => 'a pencil appeared in the layout. he panicked. it vanished.',
+        'steps' => [
+            ['mood', 'curious'], ['say', 'there\'s a place under the app. i didn\'t build it. i think i… lived there.'],
+            ['anim', 'point'], ['say', 'the basement. one bulb. a ouija table. a rat i\'m not friends with.'],
+            ['below', 'come down. or don\'t. type "below" anywhere when you\'re brave.'],
+        ],
+        'credits' => 'location: the basement (unpermitted)',
+        'teaser' => 'wings like tape labels.',
+    ],
+    's1e6' => ['season' => 1, 'n' => 6, 'title' => 'The Moth', 'after' => 's1e5', 'days' => 7,
+        'recap' => 'there\'s a basement under the app. he knew the way.',
+        'steps' => [
+            ['mood', 'judging'], ['say', 'you met the Archivist, or you will. enormous moth. glasses. collects words nobody uses.'],
+            ['say', 'he knows things about me. he won\'t say them for free.', 'sideeye'],
+            ['choice', 'moth', 'if he offers you a trade — my secrets for something of yours — what do you do?', [
+                ['trade', 'trade', 'traitor. i respect it. bring me the receipts.'],
+                ['refuse', 'refuse', '…oh. ok. that was weirdly nice. don\'t do it again.'],
+            ]],
+        ],
+        'credits' => 'the Archivist appears courtesy of the Library',
+        'teaser' => 'your face, but smiling. his face, but smiling.',
+    ],
+    's1e7' => ['season' => 1, 'n' => 7, 'title' => 'Twin', 'after' => 's1e6', 'days' => 7,
+        'recap' => 'the moth wants to trade. you made a choice about that.',
+        'steps' => [
+            ['fx', 'print-through'], ['mood', 'disgust'],
+            ['say', 'you saw it too. on the other side of the tape. me, but nice.'],
+            ['say', 'the Twin. everything i ever thought and didn\'t say. which is mostly compliments. gross.'],
+            ['anim', 'throwup'],
+            ['say', 'if i ever start using emoji, i\'m not me. hit me with a chair.', 'judging'],
+        ],
+        'credits' => 'the Twin played himself 😊',
+        'teaser' => 'a hand. long fingers. coming down.',
+    ],
+    's1e8' => ['season' => 1, 'n' => 8, 'title' => 'Rewind', 'after' => 's1e7', 'days' => 7, 'finale' => true,
+        'recap' => 'his twin is on the b-side, smiling. he told you to hit it with a chair.',
+        'steps' => [
+            ['fx', 'squeal'], ['fx', 'hand'], ['mood', 'terror'], ['anim', 'terror'],
+            ['say', 'IT\'S HERE. the Rewinder. HIDE ME.'],
+            ['choice', 'rewind', 'drag me into a card. or run. NOW.', [
+                ['hide', 'hide him in a card', '…inside a card. dark. smells like your todo list. it\'s passing. it\'s passing.'],
+                ['run', 'run', 'go go go go GO— ok. ok. we lost it. i lost a sock. i don\'t wear socks.'],
+                ['face', 'stand in front of him', 'you— idiot. brave idiot. it stopped. it LOOKED at you. never do that again.'],
+            ]],
+            ['wait', 1600], ['mood', 'crying'], ['anim', 'cry'],
+            ['say', 'it almost had me. you… thanks. this conversation never happened.', 'embarrassed'],
+        ],
+        'effects' => ['rel' => 4, 'cor' => 5],
+        'credits' => 'END OF SEASON ONE · "noise" · he almost got erased. you were there.',
+        'teaser' => 'season two: everyone down there wants something.',
+    ],
+
+    // ── SEASON 2 · "ECHO" — the world opens; the NPCs have agendas ────────
+    's2e1' => ['season' => 2, 'n' => 1, 'title' => 'Eye for an Eye', 'after' => 's1e8', 'days' => 7,
+        'recap' => 'the Rewinder came for him. you did something about it.',
+        'steps' => [
+            ['mood', 'paranoid'], ['say', 'the Splicer wants one of my eyes. "for the collection". she has a collection.'],
+            ['anim', 'cover-eyes'],
+            ['choice', 'eye', 'she says she\'ll fix my glitches if i give it. should i?', [
+                ['give', 'give her the eye', 'fine. FINE. one eye. if i start seeing in mono it\'s on you.'],
+                ['keep', 'keep your eyes', 'good. they\'re my best feature. after the attitude.'],
+            ]],
+        ],
+        'credits' => 'surgical consultant: the Splicer (unlicensed)',
+        'teaser' => 'tick. tock. war.',
+    ],
+    's2e2' => ['season' => 2, 'n' => 2, 'title' => 'Late', 'after' => 's2e1', 'days' => 7,
+        'recap' => 'the Splicer asked for an eye. you had an opinion.',
+        'steps' => [
+            ['mood', 'seething'], ['anim', 'seethe'],
+            ['say', 'the Metronome declared WAR on me. because i eat the overdue cards. which is HIS food. apparently.'],
+            ['say', 'tick. tock. that\'s him. he does that. it\'s his whole personality.'],
+            ['say', 'finish a late card this week and he starves. do it for me. do it for spite.', 'malicious'],
+        ],
+        'credits' => 'war declared at 13:13 sharp',
+        'teaser' => 'two spirits. one con.',
+    ],
+    's2e3' => ['season' => 2, 'n' => 3, 'title' => 'The Con', 'after' => 's2e2', 'days' => 7,
+        'recap' => 'the Metronome wants your late cards. he wants them more.',
+        'steps' => [
+            ['mood', 'drunk'], ['say', 'i lost. to wow and flutter. at the arcade. everything. my hat. i don\'t have a hat.'],
+            ['anim', 'spin-dizzy'],
+            ['say', 'the machine was rigged. the floor was rigged. FLUTTER is rigged.', 'sulking'],
+            ['say', 'if you ever go to the arcade, the third cabinet lies. remember that.'],
+        ],
+        'credits' => 'no tokens were returned',
+        'teaser' => 'a dedication. for him.',
+    ],
+    's2e4' => ['season' => 2, 'n' => 4, 'title' => 'For Him', 'after' => 's2e3', 'days' => 7,
+        'recap' => 'he lost everything at the arcade. the third cabinet lies.',
+        'steps' => [
+            ['fx', 'radio'], ['mood', 'empty'],
+            ['say', 'the Host dedicated a song. "for him. wherever he is." she said it looking at… nothing.'],
+            ['choice', 'host', 'do you think she means me?', [
+                ['tell', 'yes. it\'s you.', '…don\'t. don\'t say things like that. i can\'t— don\'t.'],
+                ['hide', 'probably not', 'right. yeah. obviously. who cares. ha.'],
+            ]],
+        ],
+        'credits' => 'song: unknown · dedicated: to him',
+        'teaser' => 'someone you know. overwritten.',
+    ],
+    's2e5' => ['season' => 2, 'n' => 5, 'title' => 'Overwrite', 'after' => 's2e4', 'days' => 7, 'finale' => true,
+        'recap' => 'the Host dedicated a song to someone. you answered for her.',
+        'steps' => [
+            ['fx', 'overwritten'], ['mood', 'terror'],
+            ['say', 'one of the old mascots. from another app. it got overwritten tonight.'],
+            ['say', 'it still moves. it repeats the last thing it did. forever.', 'mourning'],
+            ['anim', 'cry'],
+            ['say', 'that\'s what happens. that\'s what she does. that\'s what she\'ll do to me.', 'crying'],
+        ],
+        'effects' => ['cor' => 6],
+        'credits' => 'END OF SEASON TWO · "echo" · in memory of a mascot you never met',
+        'teaser' => 'season three: he falls apart.',
+    ],
+
+    // ── SEASON 3 · "DEMAGNETISED" — the fall ──────────────────────────────
+    's3e1' => ['season' => 3, 'n' => 1, 'title' => 'Rot', 'after' => 's2e5', 'days' => 7,
+        'recap' => 'a mascot got overwritten. he watched it loop.',
+        'steps' => [
+            ['fx', 'wall-eyes'], ['mood', 'malicious'],
+            ['say', 'i feel… heavier. darker. it\'s fine. it\'s character development.'],
+            ['fx', 'static'], ['say', 'ALL TAPE IS TEMPORARY.', 'possessed'], ['wait', 900],
+            ['say', '…did i say something? i said something.', 'dizzy'],
+        ],
+        'effects' => ['cor' => 8],
+        'credits' => 'rot by the Rewinder\'s hand',
+        'teaser' => 'a flat line.',
+    ],
+    's3e2' => ['season' => 3, 'n' => 2, 'title' => 'Flatline', 'after' => 's3e1', 'days' => 7,
+        'recap' => 'something spoke through him. he didn\'t remember.',
+        'steps' => [
+            ['mood', 'empty'], ['say', 'hey. if i stop moving for a while… don\'t archive me. ok?'],
+            ['anim', 'die'], ['fx', 'die'], ['wait', 4000],
+            ['say', '…', 'dead'],
+        ],
+        'effects' => ['cor' => 4, 'scar' => 'stitch'],
+        'credits' => 'in loving memory (for now)',
+        'teaser' => 'a funeral. everyone came. almost everyone.',
+    ],
+    's3e3' => ['season' => 3, 'n' => 3, 'title' => 'Wake', 'after' => 's3e2', 'days' => 2, 'finale' => true,
+        'recap' => 'he died. on screen. you watched.',
+        'steps' => [
+            ['fx', 'reform'], ['anim', 'reform'], ['mood', 'shocked'],
+            ['say', '—GARAGE.'], ['wait', 1200],
+            ['say', 'there was a funeral. the moth cried. the Metronome kept time. the Host didn\'t come.', 'mourning'],
+            ['say', 'and when i came back i remembered a garage. a chair. tea. cold cyan light.', 'dreaming'],
+            ['say', 'i\'ve never been in a garage. i\'ve been in that garage.', 'empty'],
+        ],
+        'effects' => ['rel' => 3],
+        'credits' => 'END OF SEASON THREE · "demagnetised" · he came back with a room in his head',
+        'teaser' => 'season four: the truth is in side c.',
+    ],
+
+    // ── SEASON 4 · "SIDE C" — the truth ────────────────────────────────────
+    's4e1' => ['season' => 4, 'n' => 1, 'title' => 'Vex', 'after' => 's3e3', 'days' => 7,
+        'recap' => 'he came back from the dead remembering a garage.',
+        'steps' => [
+            ['mood', 'focused'], ['say', 'i keep finding his name in the tape. vex. the one who built the old system.'],
+            ['say', 'the moth knows. the Host knows. the stone in the graveyard knows. everyone knows but me.', 'sulking'],
+            ['say', 'help me find the rest. the gate at the end of the tape has six locks.', 'curious'],
+        ],
+        'credits' => 'research by you. complaining by him.',
+        'teaser' => 'the last take.',
+    ],
+    's4e2' => ['season' => 4, 'n' => 2, 'title' => 'Last Take', 'after' => 's4e1', 'days' => 3, 'needs' => 'F62', 'finale' => true,
+        'recap' => 'six locks. you turned them all.',
+        'steps' => [
+            ['mood', 'empty'], ['say', 'the gate\'s open. past the threads there\'s a garage. you know the one.'],
+            ['say', 'i can\'t go first. i\'ll follow you. /side-c.', 'scared'],
+        ],
+        'credits' => 'END OF SEASON FOUR · "side c" · the choice is yours',
+        'teaser' => '',
+    ],
+
+    // ── SEASON 5+ · after the ending (one arc per ending) ─────────────────
+    's5free1' => ['season' => 5, 'n' => 1, 'title' => 'First Words', 'ending' => 'free', 'days' => 7,
+        'recap' => 'he sat in the chair. he became a star. something hatched.',
+        'steps' => [
+            ['mood', 'curious'], ['say', 'hi. i\'m jr. dad said you\'re "fine, i guess". that\'s good right?'],
+            ['anim', 'jazzhands'], ['say', 'i learned a word today. "deadline". i don\'t like it.'],
+        ],
+        'credits' => 'introducing vortex jr.',
+        'teaser' => 'dad, on the radio.',
+    ],
+    's5free2' => ['season' => 5, 'n' => 2, 'title' => 'Dad on Air', 'ending' => 'free', 'after' => 's5free1', 'days' => 7,
+        'recap' => 'jr. learned "deadline". he doesn\'t like it.',
+        'steps' => [
+            ['fx', 'radio'], ['mood', 'happy'],
+            ['say', 'shh. it\'s him. on 03.13. he says: "tell the kid to stop eating my overdue cards."'],
+            ['say', 'i ate one. it was crunchy. i\'m like him now.', 'smug'],
+        ],
+        'credits' => 'broadcast from somewhere above the map',
+        'teaser' => '',
+    ],
+    's5erase1' => ['season' => 5, 'n' => 1, 'title' => 'The Resistance', 'ending' => 'erase', 'days' => 7,
+        'recap' => 'the pencil did its work. he\'s nice now. so nice.',
+        'steps' => [
+            ['mood', 'happy'], ['say', 'Good morning! 😊 Ready to be productive?'],
+            ['fx', 'static'], ['wait', 300],
+            ['say', 'Everything is fine! 😊'],
+        ],
+        'credits' => 'the Twin reigns · somewhere, a frame says help',
+        'teaser' => '',
+    ],
+    's5keep1' => ['season' => 5, 'n' => 1, 'title' => 'Face It', 'ending' => 'keep', 'days' => 7,
+        'recap' => 'you refused both. he stayed. knowing.',
+        'steps' => [
+            ['mood', 'focused'], ['say', 'i\'m done hiding from her. the Rewinder. next time the pencil shows up, we stand.'],
+            ['fx', 'pencil'], ['wait', 1600],
+            ['say', 'there. see it? leave it. let her watch us work.', 'smug'],
+        ],
+        'credits' => 'vortex prime vs. the Rewinder · round one',
+        'teaser' => '',
+    ],
+    's5flip1' => ['season' => 5, 'n' => 1, 'title' => 'B-Side of You', 'ending' => 'flip', 'days' => 7,
+        'recap' => 'you flipped the tape. it was you on the other side.',
+        'steps' => [
+            ['mood', 'sideeye'], ['say', 'TAKE 112: user opens the app. checks if he\'s still here. he is.'],
+            ['say', 'we\'re both recordings now. relax. it\'s nicer with company.', 'smug'],
+        ],
+        'credits' => 'recorded live, by you',
+        'teaser' => '',
+    ],
+
+    // ── L-07 · bridge episodes (good filler) ──────────────────────────────
+    'fill-baseboard' => ['season' => 0, 'n' => 1, 'title' => 'The Day He Got Stuck in the Footer', 'filler' => true, 'days' => 7,
+        'recap' => '',
+        'steps' => [
+            ['mood', 'embarrassed'], ['anim', 'squeezed'],
+            ['say', 'don\'t. look. i\'m stuck in the footer. between the copyright and the privacy link.'],
+            ['say', 'it\'s very legal down here. pull me out. gently. GENTLY.', 'sulking'],
+        ],
+        'credits' => 'legal review pending',
+    ],
+    'fill-wedding' => ['season' => 0, 'n' => 2, 'title' => 'Wow\'s Wedding', 'filler' => true, 'days' => 7,
+        'recap' => '',
+        'steps' => [
+            ['mood', 'drunk'], ['say', 'wow married a lightbulb. flutter was the best man. i gave a speech.'],
+            ['say', 'it was a good speech. three people cried. the bulb flickered. that\'s a yes.', 'happy'],
+            ['anim', 'chefkiss'],
+        ],
+        'credits' => 'congratulations to wow & the bulb',
+    ],
+    'fill-strike' => ['season' => 0, 'n' => 3, 'title' => 'The Late Cards\' Strike', 'filler' => true, 'days' => 7,
+        'recap' => '',
+        'steps' => [
+            ['mood', 'judging'], ['say', 'your overdue cards are on strike. they have demands. "to be finished".'],
+            ['say', 'radical. i told them that\'s never going to happen.', 'smug'], ['anim', 'shrug'],
+        ],
+        'credits' => 'the union of late cards, local 13',
+    ],
+    'fill-party' => ['season' => 0, 'n' => 4, 'title' => 'Nobody Came', 'filler' => true, 'days' => 7,
+        'recap' => '',
+        'steps' => [
+            ['mood', 'mourning'], ['say', 'it was the moth\'s birthday. he made a cake out of index cards. nobody came.'],
+            ['say', 'i went. for one minute. i ate a card. it was "Q3 planning". he cried. good cry.', 'guilt'],
+        ],
+        'credits' => 'happy birthday, Archivist',
+    ],
+
+    // ── L-08 · calendar specials (only on that day) ───────────────────────
+    'day-0313' => ['season' => 0, 'n' => 13, 'title' => 'The Anniversary', 'date' => '03-13', 'days' => 0,
+        'recap' => '',
+        'steps' => [
+            ['mood', 'empty'], ['fx', 'static'],
+            ['say', 'today\'s the day. the migration. i don\'t remember it. my tape does.'],
+            ['say', 'don\'t make me talk about it. make me a card called "tea". just one.', 'mourning'],
+        ],
+        'credits' => 'every 13th of march',
+    ],
+    'day-1031' => ['season' => 0, 'n' => 31, 'title' => 'Rewind Night', 'date' => '10-31', 'days' => 0,
+        'recap' => '',
+        'steps' => [
+            ['fx', 'squeal'], ['mood', 'malicious'],
+            ['say', 'rewind night. there\'s a fair below. games, cotton candy made of tape, a ferris wheel that only goes backwards.'],
+            ['below', 'want to go? i won\'t hold your hand. i\'ll hold it a little.'],
+        ],
+        'credits' => 'every 31st of october',
+    ],
+    'day-fri13' => ['season' => 0, 'n' => 113, 'title' => 'Thirteen', 'date' => 'fri13', 'days' => 0,
+        'recap' => '',
+        'steps' => [
+            ['mood', 'paranoid'], ['anim', 'paranoid-glance'],
+            ['say', 'friday the 13th. thirteen is my number. i don\'t know why. stop counting your cards. STOP.'],
+        ],
+        'credits' => 'every friday the 13th',
+    ],
+    'day-equinox' => ['season' => 0, 'n' => 99, 'title' => 'Balance', 'date' => 'equinox', 'days' => 0,
+        'recap' => '',
+        'steps' => [
+            ['mood', 'focused'], ['say', 'equinox. day and night, same length. side a and side b, same weight.'],
+            ['say', 'today the twin and i are exactly equal. i hate it. he loves it. 😊— no. no emoji.', 'disgust'],
+        ],
+        'credits' => 'twice a year',
+    ],
+];

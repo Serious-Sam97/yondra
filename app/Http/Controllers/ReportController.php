@@ -7,6 +7,7 @@ use App\Services\ConversionReportService;
 use App\Services\DealsExportService;
 use App\Services\LossReportService;
 use App\Services\RevenueReportService;
+use App\Services\Vortex\FragmentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -91,6 +92,9 @@ class ReportController extends Controller
         }
 
         $csv = $this->deals->toCsv($payload);
+        // K-09 · deep into the ARG, a manual export carries one row that shouldn't
+        // exist — as a CSV comment line, so importers skip it.
+        $csv .= FragmentService::exportGhostLine($request->user());
         $filename = sprintf('deals-%s_%s-to-%s.csv', $status, $payload['from'], $payload['to']);
 
         return new StreamedResponse(function () use ($csv) {

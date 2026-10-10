@@ -15,6 +15,8 @@ use App\Infrastructure\Repository\TagModelRepository;
 use App\Services\Ai\AiDriver;
 use App\Services\Ai\AiSettingsResolver;
 use App\Services\Ai\FallbackAiDriver;
+use App\Services\Vortex\Push\PushTransport;
+use App\Services\Vortex\Push\WebPushTransport;
 use App\Services\Whatsapp\BspDriver;
 use App\Services\Whatsapp\MetaCloudDriver;
 use App\Services\Whatsapp\WhatsappDriver;
@@ -36,6 +38,8 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(BoardRepository::class, BoardModelRepository::class);
+        // Q-03 · Web Push for Vortex (tests swap in a fake)
+        $this->app->bind(PushTransport::class, WebPushTransport::class);
         $this->app->bind(CardRepository::class, CardModelRepository::class);
         $this->app->bind(ProjectRepository::class, ProjectModelRepository::class);
         $this->app->bind(SectionRepository::class, SectionModelRepository::class);

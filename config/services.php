@@ -124,4 +124,10 @@ return [
         'key' => env('TENOR_API_KEY'),
     ],
 
+
+    // Vortex MK-V (the mascot). `dev` unlocks the lab's soul controls (C-25);
+    // never set it on a real deployment.
+    'vortex' => [
+        'dev' => (bool) env('VORTEX_DEV', false),
+    ],
 ];

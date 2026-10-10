@@ -10,6 +10,10 @@ use App\Jobs\GenerateCrmChatJob;
 use App\Jobs\GenerateWorkspaceChatJob;
 use App\Services\Ai\AiDriver;
 use App\Services\AiAssistService;
+use App\Services\Vortex\CreatorService;
+use App\Services\Vortex\SocialService;
+use App\Services\Vortex\SoulService;
+use App\Services\Vortex\VortexPersona;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -216,7 +220,7 @@ class AiAssistController extends Controller
      * chip for a board the caller lost access to gets a 422 telling them to eject it,
      * never a silent leak into the snapshot.
      */
-    public function workspaceChat(Request $request, AiDriver $ai)
+    public function workspaceChat(Request $request, AiDriver $ai, SoulService $souls)
     {
         if (! $ai->isAvailable()) {
             abort(503, 'AI assist is not configured.');
@@ -233,9 +237,32 @@ class AiAssistController extends Controller
             // Tone/command keys from a fixed whitelist — the server owns the wording.
             'style' => ['sometimes', 'array', 'max:3'],
             'style.*' => ['string', 'in:'.implode(',', AiAssistService::VORTEX_STYLES)],
+            // His state, from fixed whitelists only (never free text into the prompt).
+            'persona' => ['sometimes', 'array'],
+            'persona.intensity' => ['sometimes', 'string', 'in:'.implode(',', VortexPersona::INTENSITIES)],
+            'persona.tone' => ['sometimes', 'nullable', 'string', 'in:'.implode(',', VortexPersona::TONES)],
+            'persona.mood' => ['sometimes', 'nullable', 'string', 'in:'.implode(',', VortexPersona::MOODS)],
+            'persona.relation' => ['sometimes', 'integer', 'min:-100', 'max:100'],
         ]);
         $requestId = $validated['request_id'] ?? (string) Str::uuid();
         $userId = (int) $request->user()->id;
+
+        $persona = array_intersect_key($validated['persona'] ?? [], array_flip(['intensity', 'tone', 'mood']));
+        // relation and nickname are the server's truth (his soul), never the client's
+        $soul = $souls->for($request->user());
+        $persona['relation'] = (int) $soul->relation;
+        // P-20 · a workspace can keep him Polite
+        if (app(SocialService::class)->moderation()['polite_only']) {
+            $persona['intensity'] = 'polite';
+        }
+        $persona['ending'] = $soul->state['ending'] ?? null;
+        $persona['taste'] = CreatorService::tasteHint($soul->state ?? []);
+        $persona['taught'] = CreatorService::taughtForPrompt($soul->state ?? []);
+        $persona['nickname'] = SoulService::nickname(
+            $soul->state ?? [],
+            (int) $soul->relation,
+            strtok((string) $request->user()->name, ' ') ?: null,
+        );
 
         $mounts = [];
         foreach ($validated['mounts'] ?? [] as $m) {
@@ -252,7 +279,7 @@ class AiAssistController extends Controller
             $validated['messages'],
         );
 
-        GenerateWorkspaceChatJob::dispatch($userId, $requestId, array_values($messages), $mounts, array_values(array_unique($validated['style'] ?? [])));
+        GenerateWorkspaceChatJob::dispatch($userId, $requestId, array_values($messages), $mounts, array_values(array_unique($validated['style'] ?? [])), $persona);
 
         return response()->json(['request_id' => $requestId], 202);
     }

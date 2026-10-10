@@ -29,7 +29,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         // Card History: batch each API request into one entry per card.
-        $middleware->api(append: [RecordCardHistory::class]);
+        $middleware->api(append: [RecordCardHistory::class, \App\Http\Middleware\VortexErrorComments::class,
+            \App\Http\Middleware\VortexLadoGate::class]);
 
         $middleware->group('web', [
             EnsureFrontendRequestsAreStateful::class,

@@ -38,6 +38,7 @@ class NotificationPreferenceService
         ['key' => 'sharing',     'label' => 'Board / project invite', 'description' => 'You are added to a board or project',     'active' => true],
         ['key' => 'chat',        'label' => 'Board chat',           'description' => 'New messages in a board you belong to',     'active' => true],
         ['key' => 'lead_dropped', 'label' => 'Lead dropped out',    'description' => 'A lead was auto-dropped after no reply to re-engagement', 'active' => true],
+        ['key' => 'radio',       'label' => 'Radio dedications',    'description' => 'A teammate dedicates something to you on the ghost radio', 'active' => true],
         ['key' => 'qa_sprint',   'label' => 'QA / sprint / planning', 'description' => 'Bugs filed, sprints started, planning updates', 'active' => false],
     ];
 
@@ -56,6 +57,7 @@ class NotificationPreferenceService
             'chat' => ['in_app' => true, 'email' => false, 'push' => false, 'whatsapp' => false],
             'lead_dropped' => ['in_app' => true, 'email' => true, 'push' => true, 'whatsapp' => false],
             'qa_sprint' => ['in_app' => true, 'email' => false, 'push' => false, 'whatsapp' => false],
+            'radio' => ['in_app' => true, 'email' => false, 'push' => false, 'whatsapp' => false],
         ];
     }
 
