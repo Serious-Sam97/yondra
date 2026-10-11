@@ -10,6 +10,7 @@ use App\Infrastructure\Models\YutopiaSpace;
 use App\Services\Yutopia\YutopiaPresence;
 use App\Services\Yutopia\YutopiaSpaces;
 use App\Services\Yutopia\YutopiaTokens;
+use App\Services\Yutopia\YutopiaTurn;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -22,6 +23,7 @@ class YutopiaController extends Controller
         private readonly YutopiaSpaces $spaces,
         private readonly YutopiaTokens $tokens,
         private readonly YutopiaPresence $presence,
+        private readonly YutopiaTurn $turn,
     ) {}
 
     public function spaces(Request $request): JsonResponse
@@ -55,6 +57,7 @@ class YutopiaController extends Controller
             'worldToken' => $this->tokens->world($user, $space, $avatar),
             'livekitUrl' => config('yutopia.livekit.url'),
             'livekitToken' => $this->tokens->livekit($user, $space),
+            'iceServers' => $this->turn->iceServers(),
             'expiresIn' => config('yutopia.token_ttl'),
         ]);
     }

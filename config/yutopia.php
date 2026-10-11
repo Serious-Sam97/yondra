@@ -14,4 +14,11 @@ return [
         'key' => env('LIVEKIT_API_KEY'),
         'secret' => env('LIVEKIT_API_SECRET'),
     ],
+
+    // Cloudflare TURN (Realtime → TURN): relays media when browsers can't reach LiveKit directly.
+    'turn' => [
+        'key_id' => env('CLOUDFLARE_TURN_KEY_ID'),
+        'api_token' => env('CLOUDFLARE_TURN_API_TOKEN'),
+        'ttl' => (int) env('CLOUDFLARE_TURN_TTL', 86400),
+    ],
 ];
