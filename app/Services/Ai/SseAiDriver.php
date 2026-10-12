@@ -40,6 +40,9 @@ abstract class SseAiDriver implements AiDriver
         $deadline = (int) config('services.ai.attempt_deadline', 0);
         $resource = $deadline > 0 ? $body->detach() : null;
         if ($resource !== null) {
+            // A socket read timeout, not stream_select(): chunked responses (Groq's SSE) carry
+            // PHP's dechunk filter, and a filtered stream can't be cast to a selectable fd.
+            stream_set_timeout($resource, $deadline);
             $body = Utils::streamFor($resource);
         }
         $awaitingFirstToken = $resource !== null;
@@ -50,16 +53,12 @@ abstract class SseAiDriver implements AiDriver
         // SSE frames are newline-delimited `data: {json}` lines. Read in chunks, process
         // every complete line, and keep the trailing partial for the next read.
         while (! $body->eof()) {
-            if ($awaitingFirstToken) {
-                $read = [$resource];
-                $write = $except = null;
-                // No byte from the provider within the deadline → give up on it.
-                if (@stream_select($read, $write, $except, $deadline) === 0) {
-                    throw new \RuntimeException(static::class.' did not respond within '.$deadline.'s.');
-                }
-            }
-
             $buffer .= $body->read(8192);
+
+            // No byte from the provider within the deadline → give up on it.
+            if ($awaitingFirstToken && stream_get_meta_data($resource)['timed_out']) {
+                throw new \RuntimeException(static::class.' did not respond within '.$deadline.'s.');
+            }
 
             while (($nl = strpos($buffer, "\n")) !== false) {
                 $line = trim(substr($buffer, 0, $nl));
@@ -81,7 +80,12 @@ abstract class SseAiDriver implements AiDriver
                     continue;
                 }
                 $full .= $delta;
-                $awaitingFirstToken = false; // provider is responding — stop the deadline watch.
+                if ($awaitingFirstToken) {
+                    // Provider is responding — lift the deadline back to the normal timeout so a
+                    // healthy stream is never cut.
+                    $awaitingFirstToken = false;
+                    stream_set_timeout($resource, $this->timeout());
+                }
                 $onDelta($delta);
             }
         }

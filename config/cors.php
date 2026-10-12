@@ -19,7 +19,7 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3010', 'https://yondra-thunder.vercel.app', 'https://yondra.net', 'https://yondra-vortex.yondra.net'],
+    'allowed_origins' => ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3010', 'https://yondra-thunder.vercel.app', 'https://yondra.net', 'https://yondra-vortex.yondra.net', 'https://yutopia.yondra.net'],
 
     // Any localhost port is allowed in dev (covers Vortex on :3010 and future tools).
     // Any yondra.net subdomain is allowed in prod (covers Vortex and future admin tools).
