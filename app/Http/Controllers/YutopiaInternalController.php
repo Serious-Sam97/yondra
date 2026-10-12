@@ -99,6 +99,7 @@ class YutopiaInternalController extends Controller
         $this->verify($request);
         $data = $request->validate([
             'version' => ['nullable', 'integer', 'in:2'],
+            'theme' => ['nullable', 'string', 'in:clouds,city,snow'],
             'width' => ['required', 'integer', 'between:16,96'],
             'height' => ['required', 'integer', 'between:16,96'],
             'tiles' => ['required', 'array'],
@@ -121,6 +122,7 @@ class YutopiaInternalController extends Controller
             'areas.*.priority' => ['nullable', 'integer'],
             'areas.*.ownerId' => ['nullable', 'integer'],
             'areas.*.ownerName' => ['nullable', 'string', 'max:120'],
+            'areas.*.dressing' => ['nullable', 'string', 'in:tidy,lived,busy'],
         ]);
         abort_unless(count($data['tiles']) === $data['height'], 422, 'tiles must have one row per height');
         foreach ($data['tiles'] as $row) {

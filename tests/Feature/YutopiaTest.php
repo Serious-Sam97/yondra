@@ -284,6 +284,10 @@ it('stores a validated map layout and lists who can own rooms', function () {
     internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['vWalls' => array_fill(0, 16, str_repeat('Z', 17))] + $v2)->assertUnprocessable();
     internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['tiles' => array_fill(0, 16, '#'.str_repeat('.', 15))] + $v2)->assertStatus(422);
     internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['hWalls' => null] + $v2)->assertUnprocessable();
+    // the theme around the studio
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['theme' => 'snow'] + $v2)->assertOk();
+    expect($space->fresh()->layout['theme'])->toBe('snow');
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['theme' => 'lava'] + $v2)->assertUnprocessable();
 
     $this->actingAs($bia)->getJson("/api/yutopia/spaces/{$space->id}/members")
         ->assertOk()->assertJsonPath('members.0.name', 'Ana')->assertJsonPath('members.1.name', 'Bia');
