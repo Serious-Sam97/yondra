@@ -19,7 +19,9 @@ class YutopiaSpaces
     public const DEFAULT_AVATAR = [
         'body' => 'regular', 'skin' => '#c68a5e', 'hair' => 'short', 'hairColor' => '#3b2a20',
         'top' => 'tee', 'topColor' => '#b5562f', 'bottom' => 'jeans', 'bottomColor' => '#3d4a5c',
-        'accessory' => 'none', 'accessoryColor' => '#e8a33d',
+        'accessory' => 'none', 'accessoryColor' => '#e8a33d', 'style' => 'citypop', 'gender' => 'neutral',
+        'eyewear' => 'none', 'eyewearColor' => '#2a2420', 'extra' => 'none', 'extraColor' => '#e8a33d',
+        'shoes' => 'sneakers', 'shoesColor' => '#efe4cc',
     ];
 
     // Every active project the user can open gets a space (created lazily).

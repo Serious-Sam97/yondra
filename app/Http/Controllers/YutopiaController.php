@@ -29,14 +29,28 @@ class YutopiaController extends Controller
     public function spaces(Request $request): JsonResponse
     {
         $user = $request->user();
-        $list = $this->spaces->forUser($user)->map(fn (YutopiaSpace $s) => [
+        $spaces = $this->spaces->forUser($user);
+        $presence = $spaces->mapWithKeys(fn (YutopiaSpace $s) => [$s->id => $this->presence->get($s)['people']]);
+        // the lobby shows the first few faces in each studio: their avatars in one query
+        $shown = $presence->map(fn (array $people) => array_slice($people, 0, 5));
+        $looks = YutopiaAvatar::whereIn('user_id', $shown->flatten(1)->pluck('userId')->unique()->all())
+            ->pluck('layers', 'user_id');
+        $list = $spaces->map(fn (YutopiaSpace $s) => [
             'id' => $s->id,
             'slug' => $s->slug,
             'name' => $s->name,
             'mapKey' => $s->map_key,
             'projectId' => $s->project_id,
+            'projectName' => $s->project?->name,
             'color' => $s->project?->color,
-            'online' => count($this->presence->get($s)['people']),
+            'theme' => $s->layout['theme'] ?? 'clouds',
+            'online' => count($presence[$s->id]),
+            'people' => array_map(fn (array $p) => [
+                'userId' => $p['userId'],
+                'name' => $p['name'],
+                'area' => $p['areaName'] ?? null, // the room's name (null in booths / focus mode)
+                'avatar' => array_merge(YutopiaSpaces::DEFAULT_AVATAR, $looks[$p['userId']] ?? []),
+            ], $shown[$s->id]),
         ]);
 
         return response()->json(['spaces' => $list, 'avatar' => $this->spaces->avatarFor($user), 'user' => ['id' => $user->id, 'name' => $user->name]]);
@@ -75,6 +89,14 @@ class YutopiaController extends Controller
             'body' => $slug, 'skin' => $hex, 'hair' => $slug, 'hairColor' => $hex,
             'top' => $slug, 'topColor' => $hex, 'bottom' => $slug, 'bottomColor' => $hex,
             'accessory' => $slug, 'accessoryColor' => $hex,
+            // drawing style: City-pop 80s anime (default) or Ligne claire
+            'style' => ['sometimes', 'string', 'in:citypop,ligne'],
+            // body and face shape only; neutral keeps the original figure
+            'gender' => ['sometimes', 'string', 'in:neutral,feminine,masculine'],
+            // glasses, one more thing (scarf, earrings…) and shoes have slots of their own
+            'eyewear' => ['sometimes', ...$slug], 'eyewearColor' => ['sometimes', ...$hex],
+            'extra' => ['sometimes', ...$slug], 'extraColor' => ['sometimes', ...$hex],
+            'shoes' => ['sometimes', ...$slug], 'shoesColor' => ['sometimes', ...$hex],
         ]);
         YutopiaAvatar::updateOrCreate(['user_id' => $request->user()->id], ['layers' => $layers]);
 

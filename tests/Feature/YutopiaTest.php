@@ -49,7 +49,10 @@ it('lists a space for every project the user can open', function () {
     $res = $this->actingAs($ana)->getJson('/api/yutopia/spaces')->assertOk();
 
     expect(collect($res->json('spaces'))->pluck('name')->all())->toBe(['Mine', 'Shared'])
-        ->and($res->json('avatar.top'))->toBe('tee');
+        ->and($res->json('avatar.top'))->toBe('tee')
+        ->and($res->json('spaces.0.projectName'))->toBe('Mine')
+        ->and($res->json('spaces.0.theme'))->toBe('clouds')
+        ->and($res->json('spaces.0.people'))->toBe([]);
 });
 
 it('mints world and livekit tokens only for members', function () {
@@ -92,7 +95,18 @@ it('saves and validates avatars', function () {
 
     $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['skin' => 'red'] + $layers)->assertUnprocessable();
     $this->actingAs($ana)->putJson('/api/yutopia/avatar', $layers)->assertOk()->assertJsonPath('avatar.hair', 'curly');
-    $this->actingAs($ana)->getJson('/api/yutopia/avatar')->assertJsonPath('avatar.accessory', 'headphones');
+    $this->actingAs($ana)->getJson('/api/yutopia/avatar')->assertJsonPath('avatar.accessory', 'headphones')
+        ->assertJsonPath('avatar.style', 'citypop')->assertJsonPath('avatar.gender', 'neutral');
+    $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['gender' => 'other'] + $layers)->assertUnprocessable();
+    $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['gender' => 'feminine'] + $layers)->assertOk()->assertJsonPath('avatar.gender', 'feminine');
+    $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['style' => 'pixel'] + $layers)->assertUnprocessable();
+    $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['style' => 'ligne'] + $layers)->assertOk()->assertJsonPath('avatar.style', 'ligne');
+    // glasses, one more thing and shoes: optional slots, defaulted when missing
+    $this->actingAs($ana)->getJson('/api/yutopia/avatar')->assertJsonPath('avatar.shoes', 'sneakers')->assertJsonPath('avatar.eyewear', 'none');
+    $more = ['eyewear' => 'sunglasses', 'eyewearColor' => '#2a2420', 'extra' => 'scarf', 'extraColor' => '#b5562f', 'shoes' => 'boots', 'shoesColor' => '#5b3a26'];
+    $this->actingAs($ana)->putJson('/api/yutopia/avatar', $more + $layers)->assertOk()
+        ->assertJsonPath('avatar.extra', 'scarf')->assertJsonPath('avatar.shoes', 'boots')->assertJsonPath('avatar.eyewear', 'sunglasses');
+    $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['shoesColor' => 'brown'] + $more + $layers)->assertUnprocessable();
 });
 
 it('rejects unsigned internal calls', function () {
