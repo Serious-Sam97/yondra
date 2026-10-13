@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Infrastructure\Models\YutopiaObject;
 use App\Infrastructure\Models\YutopiaGame;
+use App\Infrastructure\Models\YutopiaObject;
 use App\Infrastructure\Models\YutopiaSpace;
 use App\Services\Yutopia\YutopiaPresence;
 use App\Services\Yutopia\YutopiaSpaces;
