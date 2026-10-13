@@ -7,6 +7,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
+use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
@@ -22,6 +23,13 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         // Attaches the 'api' rate limiter (defined in AppServiceProvider) to every API route.
         $middleware->throttleApi();
+
+        // Yutopia map layouts: " " is a void tile, so rows can end in spaces or
+        // be all spaces. Trimming them broke the row lengths and every save
+        // after a resize was refused.
+        $layout = fn (Request $request) => $request->is('api/internal/yutopia/spaces/*/layout');
+        $middleware->trimStrings(except: [$layout]);
+        $middleware->convertEmptyStringsToNull(except: [$layout]);
 
         $middleware->alias([
             'vortex.admin' => EnsureVortexAdmin::class,

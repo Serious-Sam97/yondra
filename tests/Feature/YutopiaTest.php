@@ -404,3 +404,15 @@ it('keeps where a game left off in a space: a save state and a battery save', fu
     $this->actingAs($owner)->post("{$url}/u:999", ['state' => $blob('state.bin', 'X')])->assertNotFound();
     $this->actingAs($owner)->post("{$url}/b:ucity", [])->assertStatus(422);
 });
+
+it('keeps the empty space a resize adds (rows ending in void, all-void rows)', function () {
+    $ana = User::factory()->create();
+    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject($ana));
+    // grown from 12×12 to 16×16: new columns and rows are void (" ")
+    $tiles = array_merge(array_fill(0, 12, str_repeat('.', 12).'    '), array_fill(0, 4, str_repeat(' ', 16)));
+    $layout = ['version' => 2, 'width' => 16, 'height' => 16, 'tiles' => $tiles,
+        'hWalls' => array_fill(0, 17, str_repeat('.', 16)), 'vWalls' => array_fill(0, 16, str_repeat('.', 17)),
+        'spawn' => ['x' => 2.5, 'y' => 2.5], 'areas' => []];
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", $layout)->assertOk();
+    expect($space->fresh()->layout['tiles'])->toBe($tiles)->and($space->fresh()->layout['width'])->toBe(16);
+});
