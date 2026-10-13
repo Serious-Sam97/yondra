@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Infrastructure\Models\YutopiaObject;
+use App\Infrastructure\Models\YutopiaGame;
 use App\Infrastructure\Models\YutopiaSpace;
 use App\Services\Yutopia\YutopiaPresence;
 use App\Services\Yutopia\YutopiaSpaces;
@@ -68,10 +69,31 @@ class YutopiaInternalController extends Controller
     public function desk(Request $request, int $spaceId): JsonResponse
     {
         $this->verify($request);
-        $data = $request->validate(['user_id' => ['required', 'integer'], 'desks' => ['present', 'array'], 'desks.*' => ['string', 'max:64']]);
+        $data = $request->validate([
+            'user_id' => ['required', 'integer'],
+            'desks' => ['present', 'array'],
+            'desks.*' => ['string', 'max:64'],
+            'assign' => ['sometimes', 'boolean'],
+        ]);
         $space = YutopiaSpace::findOrFail($spaceId);
+        $desk = $this->spaces->deskFor($space, (int) $data['user_id'], $data['desks'], (bool) ($data['assign'] ?? true));
 
-        return response()->json(['desk' => $this->spaces->deskFor($space, (int) $data['user_id'], $data['desks'])]);
+        return response()->json(['desk' => $desk]);
+    }
+
+    // A cartridge the team uploaded, for the world-server to check one put in a console.
+    public function game(Request $request, int $spaceId, int $gameId): JsonResponse
+    {
+        $this->verify($request);
+        $game = YutopiaGame::where('space_id', $spaceId)->findOrFail($gameId);
+
+        return response()->json(['game' => [
+            'id' => "u:{$game->id}",
+            'system' => $game->system,
+            'title' => $game->title,
+            'color' => $game->color,
+            'players' => $game->players,
+        ]]);
     }
 
     public function presence(Request $request, int $spaceId): JsonResponse

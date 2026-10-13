@@ -164,6 +164,20 @@ it('assigns each person a stable free desk', function () {
     expect([$a, $b, $again])->toBe(['desk-1', 'desk-2', 'desk-1']);
 });
 
+it('looks a desk up without handing one out when asked not to assign', function () {
+    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
+    $ana = User::factory()->create();
+    $bia = User::factory()->create();
+    $desks = ['desk-1', 'desk-2'];
+    $url = "/api/internal/yutopia/spaces/{$space->id}/desk";
+
+    internalCall($this, 'POST', $url, ['user_id' => $ana->id, 'desks' => $desks])->assertOk();
+    // Ana kept hers; Bia has none and doesn't get one
+    expect(internalCall($this, 'POST', $url, ['user_id' => $ana->id, 'desks' => $desks, 'assign' => false])->json('desk'))->toBe('desk-1')
+        ->and(internalCall($this, 'POST', $url, ['user_id' => $bia->id, 'desks' => $desks, 'assign' => false])->json('desk'))->toBeNull()
+        ->and(\App\Infrastructure\Models\YutopiaDesk::where('user_id', $bia->id)->exists())->toBeFalse();
+});
+
 it('stores presence, broadcasts changes to the project and serves it to Yondra', function () {
     Event::fake([ProjectEvent::class]);
     $ana = User::factory()->create();
@@ -331,4 +345,62 @@ it('keeps my build setups: save, list, delete — mine only, checked', function 
     $this->actingAs($ana)->postJson('/api/yutopia/setups', ['name' => 'x', 'items' => [['kind' => '<b>', 'dx' => 0, 'dy' => 0, 'rot' => 0]]])->assertUnprocessable();
     $this->actingAs($ana)->deleteJson("/api/yutopia/setups/{$id}")->assertOk();
     $this->actingAs($ana)->getJson('/api/yutopia/setups')->assertJsonCount(0, 'setups');
+});
+
+it('keeps a team\'s cartridges: upload, list, play, take away — members only, checked', function () {
+    \Illuminate\Support\Facades\Storage::fake('local');
+    $owner = User::factory()->create();
+    $bia = User::factory()->create();
+    $stranger = User::factory()->create();
+    $project = yutopiaProject($owner);
+    $project->members()->attach($bia->id, ['role' => 'member']);
+    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor($project);
+    $url = "/api/yutopia/spaces/{$space->id}/games";
+    $rom = fn (string $name, int $kb) => \Illuminate\Http\UploadedFile::fake()->createWithContent($name, str_repeat("\x4e", $kb * 1024));
+
+    $res = $this->actingAs($bia)->post($url, ['file' => $rom('pong.nes', 24), 'system' => 'nes', 'title' => 'Pong', 'color' => '#C4402B', 'players' => 2])
+        ->assertCreated();
+    $id = (int) substr($res->json('game.id'), 2);
+    expect($res->json('game'))->toMatchArray(['system' => 'nes', 'title' => 'Pong', 'color' => '#c4402b', 'players' => 2, 'builtIn' => false, 'mine' => true]);
+
+    // wrong console, too big, the same one twice, strangers
+    $this->actingAs($bia)->post($url, ['file' => $rom('pong.sfc', 24), 'system' => 'nes', 'title' => 'X', 'color' => '#000000'])->assertStatus(422);
+    $this->actingAs($bia)->post($url, ['file' => $rom('big.a26', 65), 'system' => '2600', 'title' => 'X', 'color' => '#000000'])->assertStatus(422);
+    $this->actingAs($bia)->post($url, ['file' => $rom('again.nes', 24), 'system' => 'nes', 'title' => 'Again', 'color' => '#000000'])->assertStatus(422);
+    $this->actingAs($stranger)->getJson($url)->assertNotFound();
+    $this->actingAs($stranger)->get("{$url}/{$id}/rom")->assertNotFound();
+
+    // everyone in the space sees it and can play it
+    expect($this->actingAs($owner)->getJson($url)->json('games.0'))->toMatchArray(['id' => "u:{$id}", 'mine' => false]);
+    $this->actingAs($owner)->get("{$url}/{$id}/rom")->assertOk();
+
+    // the world-server can check it
+    internalCall($this, 'GET', "/api/internal/yutopia/spaces/{$space->id}/games/{$id}")
+        ->assertOk()->assertJsonPath('game.title', 'Pong');
+
+    // a member who didn't bring it can't take it away; the owner can
+    $other = User::factory()->create();
+    $project->members()->attach($other->id, ['role' => 'member']);
+    $this->actingAs($other)->deleteJson("{$url}/{$id}")->assertForbidden();
+    $this->actingAs($owner)->deleteJson("{$url}/{$id}")->assertOk();
+    expect(\App\Infrastructure\Models\YutopiaGame::count())->toBe(0);
+});
+
+it('keeps where a game left off in a space: a save state and a battery save', function () {
+    \Illuminate\Support\Facades\Storage::fake('local');
+    $owner = User::factory()->create();
+    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject($owner));
+    $url = "/api/yutopia/spaces/{$space->id}/saves";
+    $blob = fn (string $name, string $data) => \Illuminate\Http\UploadedFile::fake()->createWithContent($name, $data);
+
+    expect($this->actingAs($owner)->getJson("{$url}/b:ucity")->json())->toMatchArray(['state' => false, 'sram' => false]);
+    $this->actingAs($owner)->post("{$url}/b:ucity", ['state' => $blob('state.bin', 'STATE-1')])->assertOk();
+    $this->actingAs($owner)->post("{$url}/b:ucity", ['sram' => $blob('sram.bin', 'SRAM')])->assertOk();
+    expect($this->actingAs($owner)->getJson("{$url}/b:ucity")->json())->toMatchArray(['state' => true, 'sram' => true]);
+    expect($this->actingAs($owner)->get("{$url}/b:ucity/state")->streamedContent())->toBe('STATE-1');
+    expect($this->actingAs($owner)->get("{$url}/b:ucity/sram")->streamedContent())->toBe('SRAM');
+    // odd keys and other spaces' uploads aren't save buckets
+    $this->actingAs($owner)->getJson("{$url}/../etc")->assertNotFound();
+    $this->actingAs($owner)->post("{$url}/u:999", ['state' => $blob('state.bin', 'X')])->assertNotFound();
+    $this->actingAs($owner)->post("{$url}/b:ucity", [])->assertStatus(422);
 });

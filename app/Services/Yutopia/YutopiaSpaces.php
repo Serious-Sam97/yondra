@@ -80,12 +80,16 @@ class YutopiaSpaces
         });
     }
 
-    public function deskFor(YutopiaSpace $space, int $userId, array $deskUids): ?string
+    public function deskFor(YutopiaSpace $space, int $userId, array $deskUids, bool $assign = true): ?string
     {
-        return DB::transaction(function () use ($space, $userId, $deskUids) {
+        return DB::transaction(function () use ($space, $userId, $deskUids, $assign) {
             $mine = YutopiaDesk::where('space_id', $space->id)->where('user_id', $userId)->first();
             if ($mine && in_array($mine->desk_uid, $deskUids, true)) {
                 return $mine->desk_uid;
+            }
+            // just looking it up (people arrive at the arrival point): no new desk
+            if (! $assign) {
+                return null;
             }
             $taken = YutopiaDesk::where('space_id', $space->id)->pluck('desk_uid')->all();
             $free = array_values(array_diff($deskUids, $taken));
