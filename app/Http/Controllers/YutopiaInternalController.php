@@ -32,6 +32,7 @@ class YutopiaInternalController extends Controller
             'projectId' => $space->project_id,
             'seeded' => $space->seeded_at !== null,
             'layout' => $space->layout,
+            'radio' => $space->settings['radio'] ?? null,
             'objects' => $space->objects()->orderBy('id')->get()->map->toWorld(),
         ]);
     }
@@ -192,6 +193,31 @@ class YutopiaInternalController extends Controller
         $space = YutopiaSpace::findOrFail($spaceId);
 
         return response()->json(['granted' => app(YutopiaVortex::class)->grantWorldFragment($space, $data['fragment'], $data['user_ids'])]);
+    }
+
+    // What the radio plays (a lo-fi station or a YouTube queue), kept so it carries
+    // on after the world-server restarts or the space empties.
+    public function radio(Request $request, int $spaceId): JsonResponse
+    {
+        $this->verify($request);
+        $data = $request->validate([
+            'source' => ['required', 'in:lofi,yt'],
+            'station' => ['nullable', 'integer', 'between:0,32'],
+            'playing' => ['nullable', 'boolean'],
+            'startedAt' => ['nullable', 'numeric'],
+            'by' => ['nullable', 'string', 'max:80'],
+            'media' => ['nullable', 'array'],
+            'media.queue' => ['nullable', 'array', 'max:50'],
+        ]);
+        // validated() keeps only the nested keys that have rules: the media state
+        // goes in whole (it's the world-server's own, checked there)
+        $data['media'] = $request->input('media');
+        abort_if(strlen((string) json_encode($data)) > 64_000, 422, 'radio state too big');
+        $space = YutopiaSpace::findOrFail($spaceId);
+        $space->settings = array_merge($space->settings ?? [], ['radio' => $data]);
+        $space->save();
+
+        return response()->json(['ok' => true]);
     }
 
     private function objectRules(string $p): array

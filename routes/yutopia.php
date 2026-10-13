@@ -50,6 +50,7 @@ Route::prefix('internal/yutopia/spaces/{spaceId}')->group(function () {
     Route::post('/presence', [YutopiaInternalController::class, 'presence']);
     Route::post('/vortex', [YutopiaInternalController::class, 'vortex']);
     Route::put('/layout', [YutopiaInternalController::class, 'layout']);
+    Route::put('/radio', [YutopiaInternalController::class, 'radio']);
     Route::post('/fragment', [YutopiaInternalController::class, 'fragment']);
     Route::get('/games/{gameId}', [YutopiaInternalController::class, 'game'])->whereNumber('gameId');
 });
