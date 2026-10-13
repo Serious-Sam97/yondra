@@ -32,7 +32,7 @@ class YutopiaInternalController extends Controller
             'projectId' => $space->project_id,
             'seeded' => $space->seeded_at !== null,
             'layout' => $space->layout,
-            'radio' => $space->settings['radio'] ?? null,
+            'playlists' => $space->settings['playlists'] ?? [],
             'objects' => $space->objects()->orderBy('id')->get()->map->toWorld(),
         ]);
     }
@@ -195,26 +195,16 @@ class YutopiaInternalController extends Controller
         return response()->json(['granted' => app(YutopiaVortex::class)->grantWorldFragment($space, $data['fragment'], $data['user_ids'])]);
     }
 
-    // What the radio plays (a lo-fi station or a YouTube queue), kept so it carries
-    // on after the world-server restarts or the space empties.
-    public function radio(Request $request, int $spaceId): JsonResponse
+    // The YouTube playlists played in the space (the remotes' quick list), kept
+    // as the world-server sends them (it checks and caps them, shared/media.ts).
+    public function playlists(Request $request, int $spaceId): JsonResponse
     {
         $this->verify($request);
-        $data = $request->validate([
-            'source' => ['required', 'in:lofi,yt'],
-            'station' => ['nullable', 'integer', 'between:0,32'],
-            'playing' => ['nullable', 'boolean'],
-            'startedAt' => ['nullable', 'numeric'],
-            'by' => ['nullable', 'string', 'max:80'],
-            'media' => ['nullable', 'array'],
-            'media.queue' => ['nullable', 'array', 'max:50'],
-        ]);
-        // validated() keeps only the nested keys that have rules: the media state
-        // goes in whole (it's the world-server's own, checked there)
-        $data['media'] = $request->input('media');
-        abort_if(strlen((string) json_encode($data)) > 64_000, 422, 'radio state too big');
+        $request->validate(['playlists' => ['present', 'array', 'max:50']]); // 30 + 20 pinned
+        $playlists = $request->input('playlists');
+        abort_if(strlen((string) json_encode($playlists)) > 400_000, 422, 'too many playlists');
         $space = YutopiaSpace::findOrFail($spaceId);
-        $space->settings = array_merge($space->settings ?? [], ['radio' => $data]);
+        $space->settings = array_merge($space->settings ?? [], ['playlists' => $playlists]);
         $space->save();
 
         return response()->json(['ok' => true]);

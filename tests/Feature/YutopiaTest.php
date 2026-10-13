@@ -140,23 +140,28 @@ it('seeds a space once and hands board walls the project boards', function () {
         ->and(collect($show->json('objects'))->firstWhere('id', 'desk-1')['x'])->toBe(4);
 });
 
-it('keeps what the radio plays, and a TV\'s media with its object', function () {
+it('keeps a TV\'s and a radio\'s media with their objects', function () {
     $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
     $media = ['item' => ['src' => 'yt', 'ref' => 'M7lc1UVf-VE', 'title' => 'A song', 'dur' => 212], 'at' => 1791915000000, 'paused' => false, 'pos' => 0, 'loop' => true, 'queue' => [], 'by' => 'Ana', 'lock' => false];
 
-    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/radio", ['source' => 'yt', 'station' => 0, 'playing' => true, 'startedAt' => 1791915000000, 'by' => 'Ana', 'media' => $media])->assertOk();
-    $show = internalCall($this, 'GET', "/api/internal/yutopia/spaces/{$space->id}")->assertOk();
-    expect($show->json('radio.source'))->toBe('yt')
-        ->and($show->json('radio.media.item.ref'))->toBe('M7lc1UVf-VE')
-        ->and($show->json('radio.media.queue'))->toBe([]);
-
-    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/radio", ['source' => 'nope'])->assertUnprocessable();
-    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/radio", ['source' => 'lofi', 'station' => 2, 'playing' => false])->assertOk();
-    expect(internalCall($this, 'GET', "/api/internal/yutopia/spaces/{$space->id}")->json('radio.station'))->toBe(2);
-
-    // a TV's media rides on its object's props
     internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/objects", ['id' => 'tv-1', 'kind' => 'tv_hd', 'x' => 4, 'y' => 1, 'props' => ['media' => $media]])
         ->assertOk()->assertJsonPath('object.props.media.item.title', 'A song');
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/objects", ['id' => 'radio-1', 'kind' => 'radio', 'x' => 6, 'y' => 3, 'props' => ['radio' => ['source' => 'yt', 'playing' => true, 'media' => $media]]])
+        ->assertOk()->assertJsonPath('object.props.radio.media.item.ref', 'M7lc1UVf-VE');
+});
+
+it('keeps the playlists played in a space', function () {
+    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
+    $list = ['list' => 'PLfirst00001', 'title' => 'Lo-fi beats', 'channel' => 'Chill', 'items' => [['src' => 'yt', 'ref' => 'M7lc1UVf-VE', 'title' => 'A song', 'dur' => 212]], 'by' => 'Ana', 'usedAt' => 1791915000000, 'uses' => 1];
+
+    expect(internalCall($this, 'GET', "/api/internal/yutopia/spaces/{$space->id}")->json('playlists'))->toBe([]);
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/playlists", ['playlists' => [$list]])->assertOk();
+    $show = internalCall($this, 'GET', "/api/internal/yutopia/spaces/{$space->id}")->assertOk();
+    expect($show->json('playlists.0.title'))->toBe('Lo-fi beats')
+        ->and($show->json('playlists.0.items.0.ref'))->toBe('M7lc1UVf-VE');
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/playlists", ['playlists' => 'nope'])->assertUnprocessable();
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/playlists", ['playlists' => []])->assertOk();
+    expect(internalCall($this, 'GET', "/api/internal/yutopia/spaces/{$space->id}")->json('playlists'))->toBe([]);
 });
 
 it('moves and deletes objects from build mode', function () {
