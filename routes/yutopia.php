@@ -21,6 +21,9 @@ Route::middleware('auth:sanctum')->prefix('yutopia')->group(function () {
     Route::post('/session', [YutopiaController::class, 'session'])->middleware('throttle:60,1');
     Route::get('/avatar', [YutopiaController::class, 'showAvatar']);
     Route::put('/avatar', [YutopiaController::class, 'updateAvatar']);
+    Route::get('/setups', [YutopiaController::class, 'setups']);
+    Route::post('/setups', [YutopiaController::class, 'saveSetup'])->middleware('throttle:30,1');
+    Route::delete('/setups/{setupId}', [YutopiaController::class, 'deleteSetup']);
     Route::get('/spaces/{spaceId}/boards', [YutopiaController::class, 'boards']);
     Route::get('/spaces/{spaceId}/status', [YutopiaController::class, 'status']);
     Route::get('/spaces/{spaceId}/members', [YutopiaController::class, 'members']);

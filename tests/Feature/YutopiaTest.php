@@ -307,3 +307,28 @@ it('stores a validated map layout and lists who can own rooms', function () {
         ->assertOk()->assertJsonPath('members.0.name', 'Ana')->assertJsonPath('members.1.name', 'Bia');
     $this->actingAs(User::factory()->create())->getJson("/api/yutopia/spaces/{$space->id}/members")->assertNotFound();
 });
+
+it('keeps my build setups: save, list, delete — mine only, checked', function () {
+    $ana = User::factory()->create();
+    $bea = User::factory()->create();
+    $desk = ['name' => 'My desk', 'items' => [
+        ['kind' => 'desk', 'dx' => 0, 'dy' => 0, 'rot' => 0, 'props' => ['variant' => 2]],
+        ['kind' => 'tabletop', 'dx' => 0, 'dy' => 0, 'rot' => 0, 'props' => ['d' => 'monitor', 'c' => [1, 1]]],
+        ['kind' => 'chair', 'dx' => 0, 'dy' => 1, 'rot' => 2],
+    ]];
+    $id = $this->actingAs($ana)->postJson('/api/yutopia/setups', $desk)->assertCreated()
+        ->assertJsonPath('setup.name', 'My desk')->json('setup.id');
+    $this->actingAs($ana)->getJson('/api/yutopia/setups')->assertOk()
+        ->assertJsonCount(1, 'setups')->assertJsonPath('setups.0.items.1.props.d', 'monitor')
+        ->assertJsonPath('setups.0.items.2.props', null);
+    // someone else's are their own
+    $this->actingAs($bea)->getJson('/api/yutopia/setups')->assertJsonCount(0, 'setups');
+    $this->actingAs($bea)->deleteJson("/api/yutopia/setups/{$id}")->assertNotFound();
+    // checked: kinds, offsets, turns, size
+    $this->actingAs($ana)->postJson('/api/yutopia/setups', ['name' => 'x', 'items' => []])->assertUnprocessable();
+    $this->actingAs($ana)->postJson('/api/yutopia/setups', ['name' => 'x', 'items' => [['kind' => 'desk', 'dx' => -1, 'dy' => 0, 'rot' => 0]]])->assertUnprocessable();
+    $this->actingAs($ana)->postJson('/api/yutopia/setups', ['name' => 'x', 'items' => [['kind' => 'desk', 'dx' => 0, 'dy' => 0, 'rot' => 4]]])->assertUnprocessable();
+    $this->actingAs($ana)->postJson('/api/yutopia/setups', ['name' => 'x', 'items' => [['kind' => '<b>', 'dx' => 0, 'dy' => 0, 'rot' => 0]]])->assertUnprocessable();
+    $this->actingAs($ana)->deleteJson("/api/yutopia/setups/{$id}")->assertOk();
+    $this->actingAs($ana)->getJson('/api/yutopia/setups')->assertJsonCount(0, 'setups');
+});

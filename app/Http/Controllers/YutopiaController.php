@@ -6,6 +6,7 @@ use App\Infrastructure\Models\Board;
 use App\Infrastructure\Models\Project;
 use App\Infrastructure\Models\User;
 use App\Infrastructure\Models\YutopiaAvatar;
+use App\Infrastructure\Models\YutopiaSetup;
 use App\Infrastructure\Models\YutopiaSpace;
 use App\Services\Yutopia\YutopiaPresence;
 use App\Services\Yutopia\YutopiaSpaces;
@@ -101,6 +102,47 @@ class YutopiaController extends Controller
         YutopiaAvatar::updateOrCreate(['user_id' => $request->user()->id], ['layers' => $layers]);
 
         return response()->json(['avatar' => $this->spaces->avatarFor($request->user())]);
+    }
+
+    // "My setups": groups of things saved in build mode, placed again anywhere.
+    // The world checks every placement as usual; this only keeps the list.
+    private const SETUPS_MAX = 24;
+
+    public function setups(Request $request): JsonResponse
+    {
+        $list = YutopiaSetup::where('user_id', $request->user()->id)->latest('id')->get(['id', 'name', 'items']);
+
+        return response()->json(['setups' => $list]);
+    }
+
+    public function saveSetup(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:40'],
+            'items' => ['required', 'array', 'min:1', 'max:40'],
+            'items.*.kind' => ['required', 'string', 'alpha_dash', 'max:32'],
+            'items.*.dx' => ['required', 'integer', 'between:0,16'],
+            'items.*.dy' => ['required', 'integer', 'between:0,16'],
+            'items.*.rot' => ['required', 'integer', 'between:0,3'],
+            'items.*.props' => ['sometimes', 'nullable', 'array'],
+        ]);
+        abort_if(strlen(json_encode($data['items'])) > 16000, 422, 'That setup is too big.');
+        $user = $request->user();
+        abort_if(YutopiaSetup::where('user_id', $user->id)->count() >= self::SETUPS_MAX, 422, 'You have plenty of setups already.');
+        $items = array_map(fn (array $i) => [
+            'kind' => $i['kind'], 'dx' => $i['dx'], 'dy' => $i['dy'], 'rot' => $i['rot'], 'props' => $i['props'] ?? null,
+        ], $data['items']);
+        $setup = YutopiaSetup::create(['user_id' => $user->id, 'name' => trim($data['name']), 'items' => $items]);
+
+        return response()->json(['setup' => $setup->only(['id', 'name', 'items'])], 201);
+    }
+
+    public function deleteSetup(Request $request, int $setupId): JsonResponse
+    {
+        $setup = YutopiaSetup::where('user_id', $request->user()->id)->findOrFail($setupId);
+        $setup->delete();
+
+        return response()->json(['ok' => true]);
     }
 
     public function boards(Request $request, int $spaceId): JsonResponse
