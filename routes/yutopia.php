@@ -47,6 +47,8 @@ Route::prefix('internal/yutopia/spaces/{spaceId}')->group(function () {
     Route::put('/objects', [YutopiaInternalController::class, 'upsertObject']);
     Route::delete('/objects/{uid}', [YutopiaInternalController::class, 'deleteObject']);
     Route::post('/desk', [YutopiaInternalController::class, 'desk']);
+    Route::get('/spawn/{userId}', [YutopiaInternalController::class, 'spawn'])->whereNumber('userId');
+    Route::put('/spawn/{userId}', [YutopiaInternalController::class, 'putSpawn'])->whereNumber('userId');
     Route::post('/presence', [YutopiaInternalController::class, 'presence']);
     Route::post('/vortex', [YutopiaInternalController::class, 'vortex']);
     Route::put('/layout', [YutopiaInternalController::class, 'layout']);

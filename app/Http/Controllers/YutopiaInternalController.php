@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Infrastructure\Models\User;
 use App\Infrastructure\Models\YutopiaGame;
 use App\Infrastructure\Models\YutopiaObject;
 use App\Infrastructure\Models\YutopiaSpace;
+use App\Infrastructure\Models\YutopiaSpawn;
 use App\Services\Yutopia\YutopiaPresence;
 use App\Services\Yutopia\YutopiaSpaces;
 use App\Services\Yutopia\YutopiaVortex;
@@ -80,6 +82,38 @@ class YutopiaInternalController extends Controller
         $desk = $this->spaces->deskFor($space, (int) $data['user_id'], $data['desks'], (bool) ($data['assign'] ?? true));
 
         return response()->json(['desk' => $desk]);
+    }
+
+    // Where this person arrives in the space (null: the space's arrival point).
+    // The world-server checks the spot against the map; this only stores it.
+    public function spawn(Request $request, int $spaceId, int $userId): JsonResponse
+    {
+        $this->verify($request);
+        $row = YutopiaSpawn::where('space_id', $spaceId)->where('user_id', $userId)->first();
+
+        return response()->json(['spawn' => $row ? ['x' => $row->x, 'y' => $row->y] : null]);
+    }
+
+    public function putSpawn(Request $request, int $spaceId, int $userId): JsonResponse
+    {
+        $this->verify($request);
+        $data = $request->validate([
+            'spawn' => ['present', 'nullable', 'array'],
+            'spawn.x' => ['required_with:spawn', 'numeric', 'between:0,96'],
+            'spawn.y' => ['required_with:spawn', 'numeric', 'between:0,96'],
+        ]);
+        $space = YutopiaSpace::findOrFail($spaceId);
+        User::findOrFail($userId);
+        if ($data['spawn'] === null) {
+            YutopiaSpawn::where('space_id', $space->id)->where('user_id', $userId)->delete();
+        } else {
+            YutopiaSpawn::updateOrCreate(
+                ['space_id' => $space->id, 'user_id' => $userId],
+                ['x' => (float) $data['spawn']['x'], 'y' => (float) $data['spawn']['y']],
+            );
+        }
+
+        return response()->json(['spawn' => $data['spawn'] === null ? null : ['x' => (float) $data['spawn']['x'], 'y' => (float) $data['spawn']['y']]]);
     }
 
     // A cartridge the team uploaded, for the world-server to check one put in a console.

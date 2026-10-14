@@ -202,6 +202,25 @@ it('looks a desk up without handing one out when asked not to assign', function 
         ->and(\App\Infrastructure\Models\YutopiaDesk::where('user_id', $bia->id)->exists())->toBeFalse();
 });
 
+it('keeps each person\'s own arrival point per space, and forgets it on reset', function () {
+    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
+    $ana = User::factory()->create();
+    $bia = User::factory()->create();
+    $url = fn (User $u) => "/api/internal/yutopia/spaces/{$space->id}/spawn/{$u->id}";
+
+    expect(internalCall($this, 'GET', $url($ana))->assertOk()->json('spawn'))->toBeNull();
+    internalCall($this, 'PUT', $url($ana), ['spawn' => ['x' => 12.5, 'y' => 7.5]])->assertOk();
+    internalCall($this, 'PUT', $url($ana), ['spawn' => ['x' => 14.5, 'y' => 8.5]])->assertOk();
+
+    expect(internalCall($this, 'GET', $url($ana))->json('spawn'))->toEqual(['x' => 14.5, 'y' => 8.5])
+        ->and(internalCall($this, 'GET', $url($bia))->json('spawn'))->toBeNull()
+        ->and(\App\Infrastructure\Models\YutopiaSpawn::count())->toBe(1);
+
+    internalCall($this, 'PUT', $url($ana), ['spawn' => ['x' => 500, 'y' => 1]])->assertStatus(422);
+    internalCall($this, 'PUT', $url($ana), ['spawn' => null])->assertOk();
+    expect(internalCall($this, 'GET', $url($ana))->json('spawn'))->toBeNull();
+});
+
 it('stores presence, broadcasts changes to the project and serves it to Yondra', function () {
     Event::fake([ProjectEvent::class]);
     $ana = User::factory()->create();
