@@ -355,6 +355,15 @@ it('stores a validated map layout and lists who can own rooms', function () {
     internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['vWalls' => array_fill(0, 16, str_repeat('Z', 17))] + $v2)->assertUnprocessable();
     internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['tiles' => array_fill(0, 16, '#'.str_repeat('.', 15))] + $v2)->assertStatus(422);
     internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['hWalls' => null] + $v2)->assertUnprocessable();
+    // two-faced walls: the other face's material where it differs, kept
+    $faces = ['hBacks' => array_fill(0, 17, 'b'.str_repeat('.', 15)), 'vBacks' => array_fill(0, 16, str_repeat('.', 16).'k')] + $v2;
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", $faces)->assertOk();
+    expect($space->fresh()->layout['hBacks'][0])->toBe('b'.str_repeat('.', 15))
+        ->and($space->fresh()->layout['vBacks'][3])->toBe(str_repeat('.', 16).'k');
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['hBacks' => array_fill(0, 17, 'g'.str_repeat('.', 15))] + $faces)->assertUnprocessable();
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['hBacks' => array_fill(0, 16, str_repeat('.', 16))] + $faces)->assertStatus(422);
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['vBacks' => array_fill(0, 16, '.')] + $faces)->assertStatus(422);
+    internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['vBacks' => null] + $faces)->assertUnprocessable();
     // the theme around the studio
     internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", ['theme' => 'snow'] + $v2)->assertOk();
     expect($space->fresh()->layout['theme'])->toBe('snow');

@@ -165,6 +165,11 @@ class YutopiaInternalController extends Controller
             'hWalls.*' => ['string', 'regex:/^[.pwfbkgPWFBKh]*$/'],
             'vWalls' => ['nullable', 'array', 'required_with:hWalls'],
             'vWalls.*' => ['string', 'regex:/^[.pwfbkgPWFBKh]*$/'],
+            // the walls' other faces where their material differs ("." = as the front)
+            'hBacks' => ['nullable', 'array', 'required_with:vBacks'],
+            'hBacks.*' => ['string', 'regex:/^[.pwfbk]*$/'],
+            'vBacks' => ['nullable', 'array', 'required_with:hBacks'],
+            'vBacks.*' => ['string', 'regex:/^[.pwfbk]*$/'],
             'spawn' => ['required', 'array'],
             'spawn.x' => ['required', 'numeric', 'min:0'],
             'spawn.y' => ['required', 'numeric', 'min:0'],
@@ -196,6 +201,17 @@ class YutopiaInternalController extends Controller
             }
             foreach ($data['tiles'] as $row) {
                 abort_if(str_contains($row, '#'), 422, 'v2 layouts keep walls on edges, not tiles');
+            }
+        }
+        if (isset($data['hBacks'])) {
+            abort_unless(isset($data['hWalls']), 422, 'back faces need v2 walls');
+            abort_unless(count($data['hBacks']) === count($data['hWalls']), 422, 'hBacks must match hWalls');
+            abort_unless(count($data['vBacks']) === count($data['vWalls']), 422, 'vBacks must match vWalls');
+            foreach ($data['hBacks'] as $i => $row) {
+                abort_unless(strlen($row) === strlen($data['hWalls'][$i]), 422, 'every hBacks row must match its hWalls row');
+            }
+            foreach ($data['vBacks'] as $i => $row) {
+                abort_unless(strlen($row) === strlen($data['vWalls'][$i]), 422, 'every vBacks row must match its vWalls row');
             }
         }
         $space = YutopiaSpace::findOrFail($spaceId);
