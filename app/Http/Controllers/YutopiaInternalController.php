@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Infrastructure\Models\User;
 use App\Infrastructure\Models\YutopiaGame;
 use App\Infrastructure\Models\YutopiaObject;
+use App\Infrastructure\Models\YutopiaPet;
 use App\Infrastructure\Models\YutopiaSpace;
 use App\Infrastructure\Models\YutopiaSpawn;
 use App\Services\Yutopia\YutopiaPresence;
@@ -258,6 +259,91 @@ class YutopiaInternalController extends Controller
         $space->save();
 
         return response()->json(['ok' => true]);
+    }
+
+    // ── pets (shared/pets.ts PetRecord) ────────────────────────────────────
+    public function pets(Request $request, int $userId): JsonResponse
+    {
+        $this->verify($request);
+
+        return response()->json(['pets' => YutopiaPet::where('user_id', $userId)->orderBy('id')->get()->map->toWorld()]);
+    }
+
+    public function createPet(Request $request, int $userId): JsonResponse
+    {
+        $this->verify($request);
+        $data = $request->validate($this->petRules(true));
+        User::findOrFail($userId);
+        abort_if(YutopiaPet::where('user_id', $userId)->count() >= YutopiaPet::MAX_PER_USER, 422, 'too many pets');
+        $pet = YutopiaPet::create($this->petColumns($data) + ['user_id' => $userId]);
+
+        return response()->json(['pet' => $pet->toWorld()], 201);
+    }
+
+    public function savePet(Request $request, int $userId, int $petId): JsonResponse
+    {
+        $this->verify($request);
+        $pet = YutopiaPet::where('user_id', $userId)->findOrFail($petId);
+        $data = $request->validate($this->petRules(false));
+        $pet->fill($this->petColumns($data))->save();
+
+        return response()->json(['pet' => $pet->fresh()->toWorld()]);
+    }
+
+    public function deletePet(Request $request, int $userId, int $petId): JsonResponse
+    {
+        $this->verify($request);
+        YutopiaPet::where('user_id', $userId)->where('id', $petId)->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
+    private function petRules(bool $new): array
+    {
+        $req = $new ? 'required' : 'sometimes';
+
+        return [
+            'species' => [$req, 'string', 'in:dog,cat,rabbit,platypus,capybara,parrot'],
+            'name' => [$req, 'string', 'max:20'],
+            'look' => [$req, 'array'],
+            'outfit' => [$req, 'array'],
+            'needs' => [$req, 'array'],
+            'needs.food' => ['required_with:needs', 'numeric', 'between:0,100'],
+            'needs.water' => ['required_with:needs', 'numeric', 'between:0,100'],
+            'needs.energy' => ['required_with:needs', 'numeric', 'between:0,100'],
+            'needs.fun' => ['required_with:needs', 'numeric', 'between:0,100'],
+            'needs.health' => ['required_with:needs', 'numeric', 'between:0,100'],
+            'xp' => [$req, 'integer', 'between:0,100000000'],
+            'tricks' => [$new ? 'present' : 'sometimes', 'array', 'max:20'],
+            'alive' => [$req, 'boolean'],
+            'wins' => [$req, 'integer', 'min:0'],
+            'losses' => [$req, 'integer', 'min:0'],
+            'bornAt' => [$req, 'integer'],
+            'diedAt' => ['sometimes', 'nullable', 'integer'],
+            'seenAt' => [$req, 'integer'],
+        ];
+    }
+
+    private function petColumns(array $d): array
+    {
+        $ms = fn (?int $v) => $v === null ? null : \Carbon\Carbon::createFromTimestampMs($v);
+        $out = [];
+        foreach (['species', 'name', 'look', 'outfit', 'needs', 'xp', 'tricks', 'alive', 'wins', 'losses'] as $k) {
+            if (array_key_exists($k, $d)) {
+                $out[$k] = $d[$k];
+            }
+        }
+        if (array_key_exists('bornAt', $d)) {
+            $out['born_at'] = $ms($d['bornAt']);
+        }
+        if (array_key_exists('diedAt', $d)) {
+            $out['died_at'] = $ms($d['diedAt']);
+        }
+        if (array_key_exists('seenAt', $d)) {
+            $out['seen_at'] = $ms($d['seenAt']);
+        }
+
+        return $out;
     }
 
     private function objectRules(string $p): array

@@ -41,6 +41,14 @@ Route::middleware('auth:sanctum')->prefix('yutopia')->group(function () {
     Route::post('/spaces/{spaceId}/saves/{game}', [YutopiaGamesController::class, 'putSave'])->middleware('throttle:60,1');
 });
 
+// pets belong to a person, not a space (world-server only, signed)
+Route::prefix('internal/yutopia/pets/{userId}')->whereNumber('userId')->group(function () {
+    Route::get('/', [YutopiaInternalController::class, 'pets']);
+    Route::post('/', [YutopiaInternalController::class, 'createPet']);
+    Route::put('/{petId}', [YutopiaInternalController::class, 'savePet'])->whereNumber('petId');
+    Route::delete('/{petId}', [YutopiaInternalController::class, 'deletePet'])->whereNumber('petId');
+});
+
 Route::prefix('internal/yutopia/spaces/{spaceId}')->group(function () {
     Route::get('/', [YutopiaInternalController::class, 'space']);
     Route::post('/seed', [YutopiaInternalController::class, 'seed']);

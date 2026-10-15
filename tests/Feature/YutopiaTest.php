@@ -468,3 +468,30 @@ it('keeps the empty space a resize adds (rows ending in void, all-void rows)', f
     internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/layout", $layout)->assertOk();
     expect($space->fresh()->layout['tiles'])->toBe($tiles)->and($space->fresh()->layout['width'])->toBe(16);
 });
+
+it('keeps someone\'s pets for the world-server: create, read, update, delete, at most three', function () {
+    $ana = User::factory()->create();
+    $url = "/api/internal/yutopia/pets/{$ana->id}";
+    expect(internalCall($this, 'GET', $url)->assertOk()->json('pets'))->toBe([]);
+    $rec = fn (string $name) => [
+        'species' => 'platypus', 'name' => $name, 'look' => ['color' => '#5b3a26', 'mark' => 'socks', 'markColor' => '#efe4cc'],
+        'outfit' => ['hat' => 'none', 'hatColor' => '#c4402b', 'collar' => 'none', 'collarColor' => '#c4402b', 'coat' => 'none', 'coatColor' => '#6e7b3a'],
+        'needs' => ['food' => 100, 'water' => 100, 'energy' => 100, 'fun' => 100, 'health' => 100],
+        'xp' => 0, 'tricks' => [], 'alive' => true, 'wins' => 0, 'losses' => 0, 'bornAt' => 1760000000000, 'diedAt' => null, 'seenAt' => 1760000000000,
+    ];
+    $created = internalCall($this, 'POST', $url, $rec('Perry'))->assertCreated()->json('pet');
+    expect($created['name'])->toBe('Perry')->and($created['seenAt'])->toBe(1760000000000)->and($created['tricks'])->toBe([]);
+    internalCall($this, 'PUT', "$url/{$created['id']}", ['xp' => 120, 'tricks' => ['sit' => 100], 'needs' => ['food' => 40, 'water' => 50, 'energy' => 60, 'fun' => 70, 'health' => 90], 'seenAt' => 1760000100000])->assertOk();
+    $pets = internalCall($this, 'GET', $url)->json('pets');
+    expect($pets)->toHaveCount(1)->and($pets[0]['xp'])->toBe(120)->and($pets[0]['tricks'])->toBe(['sit' => 100])->and($pets[0]['needs']['food'])->toBe(40);
+    internalCall($this, 'POST', $url, $rec('Two'))->assertCreated();
+    internalCall($this, 'POST', $url, $rec('Three'))->assertCreated();
+    internalCall($this, 'POST', $url, $rec('Four'))->assertStatus(422);
+    // a bad species is refused, someone else's pet can't be touched
+    internalCall($this, 'POST', "/api/internal/yutopia/pets/".User::factory()->create()->id, ['species' => 'dragon'] + $rec('X'))->assertStatus(422);
+    internalCall($this, 'PUT', "/api/internal/yutopia/pets/".User::factory()->create()->id."/{$created['id']}", ['xp' => 1])->assertNotFound();
+    internalCall($this, 'DELETE', "$url/{$created['id']}")->assertOk();
+    expect(internalCall($this, 'GET', $url)->json('pets'))->toHaveCount(2);
+    // unsigned: no
+    $this->getJson($url)->assertStatus(401);
+});
