@@ -235,4 +235,8 @@ return [
     'Y03' => ['layer' => 4, 'where' => 'yutopia · two at the terminal', 'claim' => 'passive', 'after' => ['Y01', 'Y02'],
         'text' => 'with two people in the room the screen showed a pencil, turning in the reel. then a voice: "not yet."',
         'hints' => ['the terminal is lonely.', 'bring someone.', 'stand at it together.']],
+    // the desks' computers run VortexOS, the system he wrote before Yondra (yutopia/docs/plan/19-vortexos.md)
+    'Y04' => ['layer' => 2, 'where' => 'yutopia · a desk computer', 'claim' => 'passive', 'after' => ['Y01'],
+        'text' => 'the computer on the desk asked for a network password. it already knew yours. it has been waiting since 1989.',
+        'hints' => ['the desks have computers.', 'they run something older than yondra.', 'sit down and sign in.']],
 ];

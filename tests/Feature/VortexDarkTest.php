@@ -10,8 +10,8 @@ use Carbon\Carbon;
 it('only reveals fragment texts once owned, and validates codes by hash', function () {
     $u = User::factory()->create();
     $list = $this->actingAs($u)->getJson('/api/mascot/fragments')->assertOk()->json();
-    // 64 + Y01–Y03 (Yutopia)
-    expect($list['total'])->toBe(67)->and($list['owned'])->toBe([]);
+    // 64 + Y01–Y04 (Yutopia)
+    expect($list['total'])->toBe(68)->and($list['owned'])->toBe([]);
 
     $this->actingAs($u)->postJson('/api/mascot/fragments/claim', ['id' => 'F06', 'proof' => 'forget'])->assertStatus(422);
     $this->actingAs($u)->postJson('/api/mascot/fragments/claim', ['id' => 'F06', 'proof' => ' Remember '])

@@ -6,9 +6,18 @@ use App\Infrastructure\Models\Card;
 use App\Infrastructure\Models\Project;
 use App\Infrastructure\Models\Section;
 use App\Infrastructure\Models\User;
+use App\Infrastructure\Models\YutopiaDesk;
+use App\Infrastructure\Models\YutopiaGame;
 use App\Infrastructure\Models\YutopiaSpace;
+use App\Infrastructure\Models\YutopiaSpawn;
+use App\Services\Vortex\FragmentService;
+use App\Services\Vortex\SoulService;
+use App\Services\Yutopia\YutopiaSpaces;
 use App\Services\Yutopia\YutopiaTokens;
+use App\Services\Yutopia\YutopiaVortex;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
     config([
@@ -81,7 +90,7 @@ it('gives plain members no build role', function () {
     $bia = User::factory()->create();
     $project = yutopiaProject($owner);
     $project->members()->attach($bia->id, ['role' => 'member']);
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor($project);
+    $space = app(YutopiaSpaces::class)->ensureFor($project);
 
     $res = $this->actingAs($bia)->postJson('/api/yutopia/session', ['space_id' => $space->id])->assertOk();
 
@@ -110,7 +119,7 @@ it('saves and validates avatars', function () {
 });
 
 it('rejects unsigned internal calls', function () {
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
+    $space = app(YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
 
     $this->getJson("/api/internal/yutopia/spaces/{$space->id}")->assertUnauthorized();
     $this->withHeaders(['X-Yutopia-Timestamp' => time(), 'X-Yutopia-Signature' => 'nope'])
@@ -122,7 +131,7 @@ it('seeds a space once and hands board walls the project boards', function () {
     $project = yutopiaProject($ana);
     $b1 = Board::create(['user_id' => $ana->id, 'project_id' => $project->id, 'name' => 'Dev', 'description' => '', 'position' => 0]);
     $b2 = Board::create(['user_id' => $ana->id, 'project_id' => $project->id, 'name' => 'Sales', 'description' => '', 'position' => 1]);
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor($project);
+    $space = app(YutopiaSpaces::class)->ensureFor($project);
     $objects = [
         ['id' => 'wall-a', 'kind' => 'board_wall', 'x' => 3, 'y' => 1],
         ['id' => 'wall-b', 'kind' => 'board_wall', 'x' => 6, 'y' => 1],
@@ -141,7 +150,7 @@ it('seeds a space once and hands board walls the project boards', function () {
 });
 
 it('keeps a TV\'s and a radio\'s media with their objects', function () {
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
+    $space = app(YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
     $media = ['item' => ['src' => 'yt', 'ref' => 'M7lc1UVf-VE', 'title' => 'A song', 'dur' => 212], 'at' => 1791915000000, 'paused' => false, 'pos' => 0, 'loop' => true, 'queue' => [], 'by' => 'Ana', 'lock' => false];
 
     internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/objects", ['id' => 'tv-1', 'kind' => 'tv_hd', 'x' => 4, 'y' => 1, 'props' => ['media' => $media]])
@@ -151,7 +160,7 @@ it('keeps a TV\'s and a radio\'s media with their objects', function () {
 });
 
 it('keeps the playlists played in a space', function () {
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
+    $space = app(YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
     $list = ['list' => 'PLfirst00001', 'title' => 'Lo-fi beats', 'channel' => 'Chill', 'items' => [['src' => 'yt', 'ref' => 'M7lc1UVf-VE', 'title' => 'A song', 'dur' => 212]], 'by' => 'Ana', 'usedAt' => 1791915000000, 'uses' => 1];
 
     expect(internalCall($this, 'GET', "/api/internal/yutopia/spaces/{$space->id}")->json('playlists'))->toBe([]);
@@ -165,7 +174,7 @@ it('keeps the playlists played in a space', function () {
 });
 
 it('moves and deletes objects from build mode', function () {
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
+    $space = app(YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
 
     internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/objects", ['id' => 'plant-1', 'kind' => 'plant', 'x' => 2, 'y' => 3])->assertOk();
     internalCall($this, 'PUT', "/api/internal/yutopia/spaces/{$space->id}/objects", ['id' => 'plant-1', 'kind' => 'plant', 'x' => 5, 'y' => 3, 'rot' => 2])
@@ -176,7 +185,7 @@ it('moves and deletes objects from build mode', function () {
 });
 
 it('assigns each person a stable free desk', function () {
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
+    $space = app(YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
     $ana = User::factory()->create();
     $bia = User::factory()->create();
     $desks = ['desk-1', 'desk-2'];
@@ -189,7 +198,7 @@ it('assigns each person a stable free desk', function () {
 });
 
 it('looks a desk up without handing one out when asked not to assign', function () {
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
+    $space = app(YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
     $ana = User::factory()->create();
     $bia = User::factory()->create();
     $desks = ['desk-1', 'desk-2'];
@@ -199,11 +208,11 @@ it('looks a desk up without handing one out when asked not to assign', function 
     // Ana kept hers; Bia has none and doesn't get one
     expect(internalCall($this, 'POST', $url, ['user_id' => $ana->id, 'desks' => $desks, 'assign' => false])->json('desk'))->toBe('desk-1')
         ->and(internalCall($this, 'POST', $url, ['user_id' => $bia->id, 'desks' => $desks, 'assign' => false])->json('desk'))->toBeNull()
-        ->and(\App\Infrastructure\Models\YutopiaDesk::where('user_id', $bia->id)->exists())->toBeFalse();
+        ->and(YutopiaDesk::where('user_id', $bia->id)->exists())->toBeFalse();
 });
 
 it('keeps each person\'s own arrival point per space, and forgets it on reset', function () {
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
+    $space = app(YutopiaSpaces::class)->ensureFor(yutopiaProject(User::factory()->create()));
     $ana = User::factory()->create();
     $bia = User::factory()->create();
     $url = fn (User $u) => "/api/internal/yutopia/spaces/{$space->id}/spawn/{$u->id}";
@@ -214,7 +223,7 @@ it('keeps each person\'s own arrival point per space, and forgets it on reset', 
 
     expect(internalCall($this, 'GET', $url($ana))->json('spawn'))->toEqual(['x' => 14.5, 'y' => 8.5])
         ->and(internalCall($this, 'GET', $url($bia))->json('spawn'))->toBeNull()
-        ->and(\App\Infrastructure\Models\YutopiaSpawn::count())->toBe(1);
+        ->and(YutopiaSpawn::count())->toBe(1);
 
     internalCall($this, 'PUT', $url($ana), ['spawn' => ['x' => 500, 'y' => 1]])->assertStatus(422);
     internalCall($this, 'PUT', $url($ana), ['spawn' => null])->assertOk();
@@ -225,7 +234,7 @@ it('stores presence, broadcasts changes to the project and serves it to Yondra',
     Event::fake([ProjectEvent::class]);
     $ana = User::factory()->create();
     $project = yutopiaProject($ana);
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor($project);
+    $space = app(YutopiaSpaces::class)->ensureFor($project);
     $people = ['people' => [['user_id' => $ana->id, 'name' => 'Ana', 'area' => 'war-room', 'area_name' => 'War Room', 'status' => 'online']]];
 
     internalCall($this, 'POST', "/api/internal/yutopia/spaces/{$space->id}/presence", $people)->assertOk();
@@ -251,7 +260,7 @@ it('reports what each member is doing from their open cards', function () {
     Card::create(['board_id' => $board->id, 'section_id' => $todo->id, 'name' => 'Later', 'description' => '', 'assigned_user_id' => $ana->id, 'position' => 0]);
     Card::create(['board_id' => $board->id, 'section_id' => $doing->id, 'name' => 'Now', 'description' => '', 'assigned_user_id' => $ana->id, 'position' => 0, 'ticket_number' => 7]);
     Card::create(['board_id' => $board->id, 'section_id' => $done->id, 'name' => 'Shipped', 'description' => '', 'assigned_user_id' => $ana->id, 'position' => 0]);
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor($project);
+    $space = app(YutopiaSpaces::class)->ensureFor($project);
 
     $res = $this->actingAs($ana)->getJson("/api/yutopia/spaces/{$space->id}/status")->assertOk();
 
@@ -274,7 +283,7 @@ it('hands off a Yondra login with a one-time code', function () {
 
 it('gives Vortex public lines that name nobody and personal lines from the soul', function () {
     $ana = User::factory()->create(['name' => 'Ana Lima']);
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject($ana));
+    $space = app(YutopiaSpaces::class)->ensureFor(yutopiaProject($ana));
 
     for ($i = 0; $i < 20; $i++) {
         $res = internalCall($this, 'POST', "/api/internal/yutopia/spaces/{$space->id}/vortex", ['event' => 'ambient'])->assertOk();
@@ -287,8 +296,8 @@ it('gives Vortex public lines that name nobody and personal lines from the soul'
     expect($res->json('personal'))->toBeTrue()->and($res->json('line'))->toBeString();
 
     // poking him in the studio is a fragment (once)
-    $soul = app(\App\Services\Vortex\SoulService::class)->for($ana);
-    expect(app(\App\Services\Vortex\FragmentService::class)->owned($soul->fresh()))->toContain('Y01');
+    $soul = app(SoulService::class)->for($ana);
+    expect(app(FragmentService::class)->owned($soul->fresh()))->toContain('Y01');
 
     // strangers get nothing
     $stranger = User::factory()->create();
@@ -301,9 +310,9 @@ it('only grants world fragments on the allowlist, with their prerequisites', fun
     $bia = User::factory()->create();
     $project = yutopiaProject($ana);
     $project->members()->attach($bia->id, ['role' => 'member']);
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor($project);
-    $frags = app(\App\Services\Vortex\FragmentService::class);
-    $souls = app(\App\Services\Vortex\SoulService::class);
+    $space = app(YutopiaSpaces::class)->ensureFor($project);
+    $frags = app(FragmentService::class);
+    $souls = app(SoulService::class);
 
     internalCall($this, 'POST', "/api/internal/yutopia/spaces/{$space->id}/fragment", ['fragment' => 'F64', 'user_ids' => [$ana->id]])
         ->assertJsonPath('granted', []);
@@ -320,6 +329,19 @@ it('only grants world fragments on the allowlist, with their prerequisites', fun
 
     internalCall($this, 'POST', "/api/internal/yutopia/spaces/{$space->id}/fragment", ['fragment' => 'Y03', 'user_ids' => [$ana->id, $bia->id]])
         ->assertJsonPath('granted', [$ana->id]);
+
+    // Y04: signing in to VortexOS on a desk computer (after Y01), once
+    internalCall($this, 'POST', "/api/internal/yutopia/spaces/{$space->id}/fragment", ['fragment' => 'Y04', 'user_ids' => [$bia->id]])
+        ->assertJsonPath('granted', [$bia->id]);
+    internalCall($this, 'POST', "/api/internal/yutopia/spaces/{$space->id}/fragment", ['fragment' => 'Y04', 'user_ids' => [$bia->id]])
+        ->assertJsonPath('granted', []);
+});
+
+it('lets Vortex react, in public, to VortexOS booting near him', function () {
+    $ana = User::factory()->create();
+    $space = app(YutopiaSpaces::class)->ensureFor(yutopiaProject($ana));
+    $line = app(YutopiaVortex::class)->line($space, 'vortexos', $ana->id);
+    expect($line['personal'])->toBeFalse()->and($line['line'])->toBeString()->not->toBeEmpty();
 });
 
 it('stores a validated map layout and lists who can own rooms', function () {
@@ -327,7 +349,7 @@ it('stores a validated map layout and lists who can own rooms', function () {
     $bia = User::factory()->create(['name' => 'Bia']);
     $project = yutopiaProject($ana);
     $project->members()->attach($bia->id, ['role' => 'member']);
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor($project);
+    $space = app(YutopiaSpaces::class)->ensureFor($project);
     $row = str_repeat('.', 16);
     $layout = [
         'width' => 16, 'height' => 16,
@@ -400,15 +422,15 @@ it('keeps my build setups: save, list, delete — mine only, checked', function 
 });
 
 it('keeps a team\'s cartridges: upload, list, play, take away — members only, checked', function () {
-    \Illuminate\Support\Facades\Storage::fake('local');
+    Storage::fake('local');
     $owner = User::factory()->create();
     $bia = User::factory()->create();
     $stranger = User::factory()->create();
     $project = yutopiaProject($owner);
     $project->members()->attach($bia->id, ['role' => 'member']);
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor($project);
+    $space = app(YutopiaSpaces::class)->ensureFor($project);
     $url = "/api/yutopia/spaces/{$space->id}/games";
-    $rom = fn (string $name, int $kb) => \Illuminate\Http\UploadedFile::fake()->createWithContent($name, str_repeat("\x4e", $kb * 1024));
+    $rom = fn (string $name, int $kb) => UploadedFile::fake()->createWithContent($name, str_repeat("\x4e", $kb * 1024));
 
     $res = $this->actingAs($bia)->post($url, ['file' => $rom('pong.nes', 24), 'system' => 'nes', 'title' => 'Pong', 'color' => '#C4402B', 'players' => 2])
         ->assertCreated();
@@ -435,15 +457,15 @@ it('keeps a team\'s cartridges: upload, list, play, take away — members only, 
     $project->members()->attach($other->id, ['role' => 'member']);
     $this->actingAs($other)->deleteJson("{$url}/{$id}")->assertForbidden();
     $this->actingAs($owner)->deleteJson("{$url}/{$id}")->assertOk();
-    expect(\App\Infrastructure\Models\YutopiaGame::count())->toBe(0);
+    expect(YutopiaGame::count())->toBe(0);
 });
 
 it('keeps where a game left off in a space: a save state and a battery save', function () {
-    \Illuminate\Support\Facades\Storage::fake('local');
+    Storage::fake('local');
     $owner = User::factory()->create();
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject($owner));
+    $space = app(YutopiaSpaces::class)->ensureFor(yutopiaProject($owner));
     $url = "/api/yutopia/spaces/{$space->id}/saves";
-    $blob = fn (string $name, string $data) => \Illuminate\Http\UploadedFile::fake()->createWithContent($name, $data);
+    $blob = fn (string $name, string $data) => UploadedFile::fake()->createWithContent($name, $data);
 
     expect($this->actingAs($owner)->getJson("{$url}/b:ucity")->json())->toMatchArray(['state' => false, 'sram' => false]);
     $this->actingAs($owner)->post("{$url}/b:ucity", ['state' => $blob('state.bin', 'STATE-1')])->assertOk();
@@ -459,7 +481,7 @@ it('keeps where a game left off in a space: a save state and a battery save', fu
 
 it('keeps the empty space a resize adds (rows ending in void, all-void rows)', function () {
     $ana = User::factory()->create();
-    $space = app(\App\Services\Yutopia\YutopiaSpaces::class)->ensureFor(yutopiaProject($ana));
+    $space = app(YutopiaSpaces::class)->ensureFor(yutopiaProject($ana));
     // grown from 12×12 to 16×16: new columns and rows are void (" ")
     $tiles = array_merge(array_fill(0, 12, str_repeat('.', 12).'    '), array_fill(0, 4, str_repeat(' ', 16)));
     $layout = ['version' => 2, 'width' => 16, 'height' => 16, 'tiles' => $tiles,
@@ -494,8 +516,8 @@ it('keeps someone\'s pets for the world-server: create, read, update, delete, at
     internalCall($this, 'POST', $url, $rec('Three'))->assertCreated();
     internalCall($this, 'POST', $url, $rec('Four'))->assertStatus(422);
     // a bad species is refused, someone else's pet can't be touched
-    internalCall($this, 'POST', "/api/internal/yutopia/pets/".User::factory()->create()->id, ['species' => 'dragon'] + $rec('X'))->assertStatus(422);
-    internalCall($this, 'PUT', "/api/internal/yutopia/pets/".User::factory()->create()->id."/{$created['id']}", ['xp' => 1])->assertNotFound();
+    internalCall($this, 'POST', '/api/internal/yutopia/pets/'.User::factory()->create()->id, ['species' => 'dragon'] + $rec('X'))->assertStatus(422);
+    internalCall($this, 'PUT', '/api/internal/yutopia/pets/'.User::factory()->create()->id."/{$created['id']}", ['xp' => 1])->assertNotFound();
     internalCall($this, 'DELETE', "$url/{$created['id']}")->assertOk();
     expect(internalCall($this, 'GET', $url)->json('pets'))->toHaveCount(2);
     // unsigned: no

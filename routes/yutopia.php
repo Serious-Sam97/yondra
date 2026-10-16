@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\VortexOSController;
 use App\Http\Controllers\YutopiaController;
 use App\Http\Controllers\YutopiaGamesController;
 use App\Http\Controllers\YutopiaInternalController;
@@ -16,6 +17,10 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::post('/yutopia/handoff/exchange', [YutopiaController::class, 'exchange'])->middleware('throttle:auth');
+
+// VortexOS on Yutopia's computers: sign in with Yondra (a one-time code), redeemed by VortexOS's backend (signed)
+Route::post('/vortexos/handoff', [VortexOSController::class, 'handoff'])->middleware(['auth:sanctum', 'throttle:30,1']);
+Route::post('/internal/vortexos/handoff', [VortexOSController::class, 'redeem'])->middleware('throttle:60,1');
 
 Route::middleware('auth:sanctum')->prefix('yutopia')->group(function () {
     Route::get('/spaces', [YutopiaController::class, 'spaces']);

@@ -22,7 +22,7 @@ use App\Services\Vortex\SoulService;
 class YutopiaVortex
 {
     // Fragments the world may grant (server-verified by the world-server).
-    public const WORLD_FRAGMENTS = ['Y01', 'Y03'];
+    public const WORLD_FRAGMENTS = ['Y01', 'Y03', 'Y04'];
 
     private const PUBLIC = [
         'ambient' => [
@@ -51,6 +51,13 @@ class YutopiaVortex
         'sleep' => [
             'zzz. *kkzzt* zzz. not asleep. defragmenting.',
         ],
+        // someone booted VortexOS on a desk computer near him (yutopia/docs/plan/19-vortexos.md)
+        'vortexos' => [
+            'that boot chord. i wrote that chord. 1989. nobody paid me.',
+            'vortexos. my old house. mind the furniture, it remembers.',
+            'someone booted the old system. it still smells like tape in there.',
+            'careful in there. the recycle bin is not empty. it was never empty.',
+        ],
     ];
 
     public function __construct(
@@ -61,7 +68,7 @@ class YutopiaVortex
     /** @return array{line: ?string, mood: string, personal: bool} */
     public function line(YutopiaSpace $space, string $event, ?int $userId = null): array
     {
-        if ($userId === null || in_array($event, ['ambient', 'radio', 'night', 'standup', 'sleep'], true)) {
+        if ($userId === null || in_array($event, ['ambient', 'radio', 'night', 'standup', 'sleep', 'vortexos'], true)) {
             $pool = self::PUBLIC[$event] ?? self::PUBLIC['ambient'];
 
             return ['line' => $this->glitchy($pool[array_rand($pool)]), 'mood' => $event === 'radio' ? 'happy' : 'smug', 'personal' => false];
