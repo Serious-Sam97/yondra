@@ -4,6 +4,7 @@ use App\Http\Controllers\VortexOSController;
 use App\Http\Controllers\YutopiaController;
 use App\Http\Controllers\YutopiaGamesController;
 use App\Http\Controllers\YutopiaInternalController;
+use App\Http\Controllers\YutopiaPhoneController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -45,6 +46,34 @@ Route::middleware('auth:sanctum')->prefix('yutopia')->group(function () {
     Route::get('/spaces/{spaceId}/saves/{game}/{kind}', [YutopiaGamesController::class, 'saveFile'])->whereIn('kind', ['state', 'sram']);
     Route::post('/spaces/{spaceId}/saves/{game}', [YutopiaGamesController::class, 'putSave'])->middleware('throttle:60,1');
 });
+
+// the phone (yutopia/docs/plan/21-cellphone.md): settings, contacts, threads,
+// texts, photos, Vortex; photo files are signed URLs (an <img src> has no token)
+Route::middleware('auth:sanctum')->prefix('yutopia/phone')->group(function () {
+    Route::get('/', [YutopiaPhoneController::class, 'show']);
+    Route::put('/', [YutopiaPhoneController::class, 'update'])->middleware('throttle:60,1');
+    Route::get('/contacts', [YutopiaPhoneController::class, 'contacts']);
+    Route::get('/threads', [YutopiaPhoneController::class, 'threads']);
+    Route::post('/threads', [YutopiaPhoneController::class, 'open'])->middleware('throttle:60,1');
+    Route::patch('/threads/{threadId}', [YutopiaPhoneController::class, 'editThread'])->whereNumber('threadId');
+    Route::delete('/threads/{threadId}/members/me', [YutopiaPhoneController::class, 'leave'])->whereNumber('threadId');
+    Route::get('/threads/{threadId}/messages', [YutopiaPhoneController::class, 'messages'])->whereNumber('threadId');
+    Route::post('/threads/{threadId}/messages', [YutopiaPhoneController::class, 'send'])->whereNumber('threadId')->middleware('throttle:40,1');
+    Route::post('/threads/{threadId}/read', [YutopiaPhoneController::class, 'read'])->whereNumber('threadId');
+    Route::post('/threads/{threadId}/typing', [YutopiaPhoneController::class, 'typing'])->whereNumber('threadId')->middleware('throttle:40,1');
+    Route::post('/messages/{messageId}/react', [YutopiaPhoneController::class, 'react'])->whereNumber('messageId')->middleware('throttle:60,1');
+    Route::get('/calls', [YutopiaPhoneController::class, 'calls']);
+    Route::get('/photos', [YutopiaPhoneController::class, 'photos']);
+    Route::post('/photos', [YutopiaPhoneController::class, 'upload'])->middleware('throttle:30,1');
+    Route::patch('/photos/{photoId}', [YutopiaPhoneController::class, 'editPhoto'])->whereNumber('photoId');
+    Route::delete('/photos/{photoId}', [YutopiaPhoneController::class, 'deletePhoto'])->whereNumber('photoId');
+    Route::post('/vortex', [YutopiaPhoneController::class, 'vortexText'])->middleware('throttle:20,1');
+    Route::post('/vortex/lines', [YutopiaPhoneController::class, 'vortexLine'])->middleware('throttle:30,1');
+    Route::post('/vortex/call', [YutopiaPhoneController::class, 'vortexCall'])->middleware('throttle:30,1');
+});
+Route::get('/yutopia/photos/{photo}', [YutopiaPhoneController::class, 'photoFile'])
+    ->whereNumber('photo')->name('yutopia.photo')->middleware('signed:relative');
+Route::post('/internal/yutopia/phone/calls', [YutopiaPhoneController::class, 'callLog'])->middleware('throttle:600,1');
 
 // pets belong to a person, not a space (world-server only, signed)
 Route::prefix('internal/yutopia/pets/{userId}')->whereNumber('userId')->group(function () {

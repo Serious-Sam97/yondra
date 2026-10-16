@@ -143,6 +143,100 @@ class YutopiaVortex
         return implode(' ', $words);
     }
 
+    // ── on the phone (yutopia/docs/plan/21-cellphone.md) ─────────────────────
+
+    /** What he texts back (curated, like everything he says in Yutopia). @return array{0:string,1:string} */
+    public function phoneReply(User $user, string $text): array
+    {
+        [$nick, $polite, $overdue, $open] = $this->phoneContext($user);
+        $t = mb_strtolower($text);
+        $has = fn (array $words) => (bool) array_filter($words, fn ($w) => str_contains($t, $w));
+        $pick = fn (array $pool) => $pool[array_rand($pool)];
+        $hell = $polite ? 'heck' : 'hell';
+
+        if ($has(['who are you', 'what are you', 'quem é você', 'o que você é'])) {
+            $line = $pick([
+                ["i wrote the os on your phone, {$nick}. 1989. on tape. you're texting my handwriting.", 'smug'],
+                ['i\'m the noise between the songs. also customer support. mostly the noise.', 'curious'],
+            ]);
+        } elseif ($has(['help', 'ajuda', 'socorro', 'card', 'task', 'tarefa', 'work', 'trabalho'])) {
+            $line = $overdue > 0
+                ? ["you have {$overdue} overdue. help yourself first. then text me. no. don't.", 'judging']
+                : ($open > 0 ? ["{$open} open cards. none of them are me. go.", 'smug'] : ["your board is empty. suspicious. what are you hiding, {$nick}?", 'paranoid']);
+        } elseif ($has(['love', 'amo', 'te adoro', '<3', '❤'])) {
+            $line = $pick([['…ok. *kkzzt* deleting this before the others see it.', 'embarrassed'], ['love is a tape loop. you\'ll hear it again. worse.', 'love']]);
+        } elseif ($has(['thank', 'obrigad', 'valeu', 'thx'])) {
+            $line = $pick([['don\'t thank me. i\'m billing you in fragments.', 'smug'], ['gratitude detected. filing it under weakness.', 'judging']]);
+        } elseif ($has(['hi', 'hello', 'hey', 'oi', 'olá', 'ola', 'eae'])) {
+            $line = $pick([
+                ["oh. it's {$nick}. texting. how 1997 of you.", 'smug'],
+                ["hi. i was in the walls. now i'm in your pocket. upgrade? debatable.", 'curious'],
+            ]);
+        } elseif ($has(['battery', 'bateria'])) {
+            $line = ['it\'s at 100%. it\'s always at 100%. stop checking. it notices.', 'sideeye'];
+        } elseif ($has(['?'])) {
+            $line = $pick([
+                ['the answer is yes. or rewind. i forget which.', 'dizzy'],
+                ["ask the moth. it knows more than i do. it won't tell you either.", 'sideeye'],
+                ["no. next question. actually no more questions, {$nick}.", 'judging'],
+            ]);
+        } else {
+            $line = $pick([
+                ['k.', 'bored'],
+                ["read it. didn't like it. *kkzzt* liked it a little.", 'sideeye'],
+                ["you text like a cursor with anxiety, {$nick}.", 'smug'],
+                ["what the {$hell} am i supposed to say to that.", 'judging'],
+                ['saving this for your eulogy. it\'s perfect.', 'malicious'],
+            ]);
+        }
+
+        return [$this->glitchy($line[0]), $line[1]];
+    }
+
+    /** A call with him: the next thing he says (and whether he hangs up after it). @return array{line:string,mood:string,hangup:bool} */
+    public function phoneCall(User $user, array $said): array
+    {
+        [$nick, $polite, $overdue, $open] = $this->phoneContext($user);
+        $n = count($said);
+        $pools = [
+            0 => [
+                ["you CALLED me? nobody calls anymore. unless they're dying. are you dying? don't answer that.", 'shocked'],
+                ["vortex's line. you have reached the void. the void is busy. what.", 'smug'],
+                ["{$nick}. i was eating static. this better be good.", 'judging'],
+            ],
+            1 => array_values(array_filter([
+                $overdue > 0 ? ["you have {$overdue} overdue cards and you're on the phone with me. bold strategy.", 'hungry'] : null,
+                $open >= 8 ? ["{$open} cards on your name. i can hear them breathing from here.", 'judging'] : null,
+                ['the line is clear. that\'s new. someone must be listening. hi, someone.', 'paranoid'],
+                ['i can hear the room behind you. it\'s judging you too. we agree on things.', 'sideeye'],
+            ])),
+            2 => [
+                ['anyway. i have to go haunt a printer.', 'bored'],
+                ["this call is being recorded. on tape. it'll play at your funeral. bye.", 'malicious'],
+                ["ok i'm hanging up. *kkzzt* that was the hang-up sound. it wasn't. this is.", 'dizzy'],
+            ],
+        ];
+        $pool = $pools[min($n, 2)];
+        $line = $pool[array_rand($pool)];
+        $hangup = $n >= 2 || random_int(1, 6) === 1;
+
+        return ['line' => $this->glitchy($line[0]), 'mood' => $line[1], 'hangup' => $hangup];
+    }
+
+    /** @return array{0:string,1:bool,2:int,3:int} nickname, polite-only, overdue, open (across their projects) */
+    private function phoneContext(User $user): array
+    {
+        $soul = $this->souls->for($user);
+        $nick = SoulService::nickname($soul->state ?? [], (int) $soul->relation, strtok((string) $user->name, ' ') ?: null);
+        $polite = app(SocialService::class)->moderation()['polite_only'] ?? false;
+        $boards = Board::whereNull('archived_at')->whereHas('project', fn ($q) => $q->whereNull('archived_at')
+            ->where(fn ($p) => $p->where('owner_id', $user->id)->orWhereHas('members', fn ($m) => $m->where('users.id', $user->id))))->pluck('id');
+        $mine = Card::whereIn('board_id', $boards)->where('assigned_user_id', $user->id)->whereNull('archived_at')->where('is_done', false);
+        $overdue = (clone $mine)->whereNotNull('due_date')->whereDate('due_date', '<', now())->count();
+
+        return [$nick, (bool) $polite, $overdue, (clone $mine)->count()];
+    }
+
     /** Grant a world fragment to people the world-server saw doing it. */
     public function grantWorldFragment(YutopiaSpace $space, string $id, array $userIds): array
     {
