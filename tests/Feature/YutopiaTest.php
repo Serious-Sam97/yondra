@@ -481,9 +481,15 @@ it('keeps someone\'s pets for the world-server: create, read, update, delete, at
     ];
     $created = internalCall($this, 'POST', $url, $rec('Perry'))->assertCreated()->json('pet');
     expect($created['name'])->toBe('Perry')->and($created['seenAt'])->toBe(1760000000000)->and($created['tricks'])->toBe([]);
-    internalCall($this, 'PUT', "$url/{$created['id']}", ['xp' => 120, 'tricks' => ['sit' => 100], 'needs' => ['food' => 40, 'water' => 50, 'energy' => 60, 'fun' => 70, 'health' => 90], 'seenAt' => 1760000100000])->assertOk();
+    expect($created['traits'])->toBeNull()->and($created['bonds'])->toBe([]);
+    internalCall($this, 'PUT', "$url/{$created['id']}", ['xp' => 120, 'tricks' => ['sit' => 100], 'needs' => ['food' => 40, 'water' => 50, 'energy' => 60, 'fun' => 70, 'health' => 90], 'seenAt' => 1760000100000,
+        'traits' => ['energy' => 0.7, 'independence' => 0.2, 'courage' => 0.5, 'greed' => 0.6, 'curiosity' => 0.5, 'affection' => 0.8, 'obedience' => 0.9],
+        'memory' => ['toys' => ['ball' => 3], 'spots' => [], 'bowls' => [], 'grudge' => []], 'bonds' => [(string) $ana->id => 42.5]])->assertOk();
     $pets = internalCall($this, 'GET', $url)->json('pets');
-    expect($pets)->toHaveCount(1)->and($pets[0]['xp'])->toBe(120)->and($pets[0]['tricks'])->toBe(['sit' => 100])->and($pets[0]['needs']['food'])->toBe(40);
+    expect($pets)->toHaveCount(1)->and($pets[0]['xp'])->toBe(120)->and($pets[0]['tricks'])->toBe(['sit' => 100])->and($pets[0]['needs']['food'])->toBe(40)
+        ->and($pets[0]['traits']['obedience'])->toBe(0.9)->and($pets[0]['memory']['toys'])->toBe(['ball' => 3])->and($pets[0]['bonds'][(string) $ana->id])->toBe(42.5);
+    // a trait out of range is refused
+    internalCall($this, 'PUT', "$url/{$created['id']}", ['traits' => ['energy' => 3]])->assertStatus(422);
     internalCall($this, 'POST', $url, $rec('Two'))->assertCreated();
     internalCall($this, 'POST', $url, $rec('Three'))->assertCreated();
     internalCall($this, 'POST', $url, $rec('Four'))->assertStatus(422);

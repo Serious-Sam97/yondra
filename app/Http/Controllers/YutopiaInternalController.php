@@ -315,6 +315,12 @@ class YutopiaInternalController extends Controller
             'needs.health' => ['required_with:needs', 'numeric', 'between:0,100'],
             'xp' => [$req, 'integer', 'between:0,100000000'],
             'tricks' => [$new ? 'present' : 'sometimes', 'array', 'max:20'],
+            // its mind (shared/mind.ts): traits 0..1, a small memory, bonds by user id
+            'traits' => ['sometimes', 'nullable', 'array', 'max:12'],
+            'traits.*' => ['numeric', 'between:0,1'],
+            'memory' => ['sometimes', 'nullable', 'array', 'max:8'],
+            'bonds' => ['sometimes', 'nullable', 'array', 'max:200'],
+            'bonds.*' => ['numeric', 'between:0,100'],
             'alive' => [$req, 'boolean'],
             'wins' => [$req, 'integer', 'min:0'],
             'losses' => [$req, 'integer', 'min:0'],
@@ -328,7 +334,7 @@ class YutopiaInternalController extends Controller
     {
         $ms = fn (?int $v) => $v === null ? null : \Carbon\Carbon::createFromTimestampMs($v);
         $out = [];
-        foreach (['species', 'name', 'look', 'outfit', 'needs', 'xp', 'tricks', 'alive', 'wins', 'losses'] as $k) {
+        foreach (['species', 'name', 'look', 'outfit', 'needs', 'xp', 'tricks', 'traits', 'memory', 'bonds', 'alive', 'wins', 'losses'] as $k) {
             if (array_key_exists($k, $d)) {
                 $out[$k] = $d[$k];
             }
