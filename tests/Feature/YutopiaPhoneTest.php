@@ -3,6 +3,7 @@
 use App\Events\YutopiaPhoneEvent;
 use App\Infrastructure\Models\Project;
 use App\Infrastructure\Models\User;
+use App\Infrastructure\Models\YutopiaContact;
 use App\Infrastructure\Models\YutopiaMessage;
 use App\Infrastructure\Models\YutopiaPhoto;
 use App\Infrastructure\Models\YutopiaSpace;
@@ -31,6 +32,10 @@ function phoneTeam(): array
     $p->members()->attach($bia->id, ['role' => 'member']);
     $p->members()->attach($caio->id, ['role' => 'member']);
     $space = YutopiaSpace::create(['project_id' => $p->id, 'slug' => 'studio-'.$p->id, 'name' => 'Studio', 'map_key' => 'studio']);
+    // their phone books: Ana has Bia and Caio, Bia has Ana
+    foreach ([[$ana, $bia], [$ana, $caio], [$bia, $ana]] as [$a, $b]) {
+        YutopiaContact::create(['user_id' => $a->id, 'contact_id' => $b->id]);
+    }
 
     return [$ana, $bia, $caio, $stranger, $space];
 }
@@ -64,10 +69,35 @@ it('keeps phone settings, cleaned', function () {
     $this->actingAs($ana)->getJson('/api/yutopia/phone')->assertJsonPath('settings.theme', 'light');
 });
 
-it('lists the team as contacts, never strangers', function () {
+it('lists only the people you added, found by their user id', function () {
     [$ana, $bia, $caio, $stranger] = phoneTeam();
-    $ids = collect($this->actingAs($ana)->getJson('/api/yutopia/phone/contacts')->assertOk()->json('contacts'))->pluck('uid');
-    expect($ids->all())->toContain($bia->id, $caio->id)->not->toContain($stranger->id, $ana->id);
+    $ids = fn ($u) => collect($this->actingAs($u)->getJson('/api/yutopia/phone/contacts')->assertOk()->json('contacts'))->pluck('uid')->all();
+    expect($ids($ana))->toEqualCanonicalizing([$bia->id, $caio->id])
+        ->and($ids($caio))->toBe([]); // Caio shares the project but added nobody
+
+    // Caio looks Ana up by her id and adds her
+    $this->actingAs($caio)->getJson("/api/yutopia/phone/users/{$ana->id}")->assertOk()
+        ->assertJsonPath('person.name', 'Ana Demo')->assertJsonPath('added', false);
+    $this->actingAs($caio)->getJson('/api/yutopia/phone/users/999999')->assertNotFound();
+    $this->actingAs($caio)->getJson("/api/yutopia/phone/users/{$caio->id}")->assertNotFound();
+    $this->actingAs($caio)->postJson('/api/yutopia/phone/contacts', ['id' => $ana->id])->assertCreated()->assertJsonPath('contact.uid', $ana->id);
+    $this->actingAs($caio)->postJson('/api/yutopia/phone/contacts', ['id' => $ana->id])->assertCreated(); // twice: still one
+    expect($ids($caio))->toBe([$ana->id]);
+    // anyone can be added (a stranger too), and taken off again
+    $this->actingAs($caio)->postJson('/api/yutopia/phone/contacts', ['id' => $stranger->id])->assertCreated();
+    $this->actingAs($caio)->deleteJson("/api/yutopia/phone/contacts/{$stranger->id}")->assertOk();
+    expect($ids($caio))->toBe([$ana->id]);
+});
+
+it('texts only people in your contacts (or someone already talking to you)', function () {
+    [$ana, $bia, $caio, $stranger] = phoneTeam();
+    // Caio has nobody: he can't start a thread
+    $this->actingAs($caio)->postJson('/api/yutopia/phone/threads', ['members' => [$ana->id]])->assertStatus(422);
+    // Ana texts Caio (he's in her contacts) — now Caio can answer without adding her
+    $t = $this->actingAs($ana)->postJson('/api/yutopia/phone/threads', ['members' => [$caio->id]])->assertOk()->json('thread');
+    $back = $this->actingAs($caio)->postJson('/api/yutopia/phone/threads', ['members' => [$ana->id]])->assertOk()->json('thread');
+    expect($back['id'])->toBe($t['id']);
+    $this->actingAs($ana)->postJson('/api/yutopia/phone/threads', ['members' => [$stranger->id]])->assertStatus(422);
 });
 
 it('texts someone: one direct thread, live to them, read receipts, unread counts', function () {
@@ -138,6 +168,7 @@ it('keeps photos: upload, list, a signed file, quota, delete removes the file', 
     Storage::fake('local');
     [$ana, $bia] = phoneTeam();
     $file = UploadedFile::fake()->image('photo.jpg', 1200, 800);
+    $video = UploadedFile::fake()->create('clip.webm', 600, 'video/webm');
     $p = $this->actingAs($ana)->post('/api/yutopia/phone/photos', ['file' => $file, 'filter' => 'film', 'selfie' => '1', 'where' => 'Open office'], ['Accept' => 'application/json'])
         ->assertCreated()->json('photo');
     expect($p['w'])->toBe(1200)->and($p['selfie'])->toBeTrue()->and($p['url'])->toStartWith('/api/yutopia/photos/');
@@ -150,6 +181,19 @@ it('keeps photos: upload, list, a signed file, quota, delete removes the file', 
     $this->actingAs($ana)->postJson("/api/yutopia/phone/threads/{$t['id']}/messages", ['photo_id' => $p['id']])->assertCreated()->assertJsonPath('message.kind', 'photo');
     // someone else's photo can't be sent
     $this->actingAs($bia)->postJson("/api/yutopia/phone/threads/{$t['id']}/messages", ['photo_id' => $p['id']])->assertStatus(422);
+
+    // Bia keeps it: a copy in her own gallery (not anyone else's)
+    $kept = $this->actingAs($bia)->postJson("/api/yutopia/phone/photos/{$p['id']}/keep")->assertCreated()->json('photo');
+    expect($kept['id'])->not->toBe($p['id'])->and($kept['user_id'])->toBe($bia->id);
+    expect($this->actingAs($bia)->getJson('/api/yutopia/phone/photos')->json('photos'))->toHaveCount(1);
+    $caioPhoto = $this->actingAs($ana)->post('/api/yutopia/phone/photos', ['file' => UploadedFile::fake()->image('b.jpg', 400, 300), 'filter' => 'none', 'selfie' => '0'], ['Accept' => 'application/json'])->json('photo');
+    $this->actingAs($bia)->postJson("/api/yutopia/phone/photos/{$caioPhoto['id']}/keep")->assertNotFound(); // never sent to her
+
+    // a video
+    $v = $this->actingAs($ana)->post('/api/yutopia/phone/photos', ['file' => $video, 'kind' => 'video', 'filter' => 'film', 'selfie' => '0', 'w' => 1280, 'h' => 720, 'secs' => 12], ['Accept' => 'application/json'])
+        ->assertCreated()->json('photo');
+    expect($v['kind'])->toBe('video')->and($v['secs'])->toBe(12);
+    $this->get($v['url'])->assertOk()->assertHeader('Content-Type', 'video/webm');
 
     $path = YutopiaPhoto::find($p['id'])->path;
     Storage::disk('local')->assertExists($path);

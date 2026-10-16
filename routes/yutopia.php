@@ -53,6 +53,9 @@ Route::middleware('auth:sanctum')->prefix('yutopia/phone')->group(function () {
     Route::get('/', [YutopiaPhoneController::class, 'show']);
     Route::put('/', [YutopiaPhoneController::class, 'update'])->middleware('throttle:60,1');
     Route::get('/contacts', [YutopiaPhoneController::class, 'contacts']);
+    Route::post('/contacts', [YutopiaPhoneController::class, 'addContact'])->middleware('throttle:30,1');
+    Route::delete('/contacts/{userId}', [YutopiaPhoneController::class, 'removeContact'])->whereNumber('userId');
+    Route::get('/users/{userId}', [YutopiaPhoneController::class, 'lookup'])->whereNumber('userId')->middleware('throttle:30,1');
     Route::get('/threads', [YutopiaPhoneController::class, 'threads']);
     Route::post('/threads', [YutopiaPhoneController::class, 'open'])->middleware('throttle:60,1');
     Route::patch('/threads/{threadId}', [YutopiaPhoneController::class, 'editThread'])->whereNumber('threadId');
@@ -66,6 +69,7 @@ Route::middleware('auth:sanctum')->prefix('yutopia/phone')->group(function () {
     Route::get('/photos', [YutopiaPhoneController::class, 'photos']);
     Route::post('/photos', [YutopiaPhoneController::class, 'upload'])->middleware('throttle:30,1');
     Route::patch('/photos/{photoId}', [YutopiaPhoneController::class, 'editPhoto'])->whereNumber('photoId');
+    Route::post('/photos/{photoId}/keep', [YutopiaPhoneController::class, 'keep'])->whereNumber('photoId')->middleware('throttle:30,1');
     Route::delete('/photos/{photoId}', [YutopiaPhoneController::class, 'deletePhoto'])->whereNumber('photoId');
     Route::post('/vortex', [YutopiaPhoneController::class, 'vortexText'])->middleware('throttle:20,1');
     Route::post('/vortex/lines', [YutopiaPhoneController::class, 'vortexLine'])->middleware('throttle:30,1');

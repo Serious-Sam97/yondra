@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Infrastructure\Models\User;
+use App\Infrastructure\Models\YutopiaContact;
 use App\Infrastructure\Models\YutopiaMessage;
 use App\Infrastructure\Models\YutopiaPhoto;
 use App\Infrastructure\Models\YutopiaSpace;
@@ -42,6 +43,34 @@ class YutopiaPhoneController extends Controller
         return response()->json(['contacts' => $this->phone->contacts($request->user(), $request->integer('space') ?: null)]);
     }
 
+    // someone by their user id (the one Settings shows), to add them
+    public function lookup(Request $request, int $userId): JsonResponse
+    {
+        $u = User::find($userId);
+        abort_unless($u && $u->id !== $request->user()->id, 404);
+
+        return response()->json(['person' => $this->phone->person($u, $request->user()), 'added' => $this->phone->isContact($request->user(), $u->id)]);
+    }
+
+    public function addContact(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $id = (int) $request->validate(['id' => ['required', 'integer', 'min:1']])['id'];
+        $other = User::find($id);
+        abort_unless($other && $other->id !== $user->id, 404, 'Nobody with that id.');
+        abort_if(YutopiaContact::where('user_id', $user->id)->count() >= YutopiaContact::MAX, 422, 'Your phone book is full.');
+        YutopiaContact::firstOrCreate(['user_id' => $user->id, 'contact_id' => $other->id]);
+
+        return response()->json(['contact' => $this->phone->person($other, $user, $request->integer('space') ?: null)], 201);
+    }
+
+    public function removeContact(Request $request, int $userId): JsonResponse
+    {
+        YutopiaContact::where('user_id', $request->user()->id)->where('contact_id', $userId)->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
     // ── threads ─────────────────────────────────────────────────────────────
     public function threads(Request $request): JsonResponse
     {
@@ -64,8 +93,10 @@ class YutopiaPhoneController extends Controller
             $t = $this->phone->vortex($user);
         } else {
             $ids = array_values(array_filter($ids, fn ($u) => $u > 0));
-            $team = $this->phone->team($user)->pluck('id')->all();
-            abort_if($ids === [] || array_diff($ids, $team) !== [], 422, 'Not on your team.');
+            abort_if($ids === [], 422, 'Nobody to talk to.');
+            foreach ($ids as $uid) {
+                abort_unless($this->phone->reachable($user, $uid), 422, 'Add them to your contacts first.');
+            }
             $t = count($ids) === 1 ? $this->phone->direct($user, $ids[0]) : $this->phone->group($user, $ids, $data['name'] ?? null);
             if ($t->kind === 'group' && $t->wasRecentlyCreated) {
                 foreach ($ids as $uid) {
@@ -160,7 +191,7 @@ class YutopiaPhoneController extends Controller
         }
         if (isset($data['name']) && $t->kind === 'group') {
             $t->update(['name' => $data['name']]);
-            foreach ($this->phone->people($t) as $uid) {
+            foreach ($this->phone->inThread($t) as $uid) {
                 $this->phone->push($uid, ['type' => 'thread', 'thread' => $this->phone->shapeThread($t, $uid)]);
             }
         }
@@ -224,19 +255,33 @@ class YutopiaPhoneController extends Controller
     public function upload(Request $request): JsonResponse
     {
         $user = $request->user();
+        $video = $request->input('kind') === 'video';
         $data = $request->validate([
-            'file' => ['required', 'file', 'mimes:jpg,jpeg', 'max:4096'],
+            'file' => $video
+                ? ['required', 'file', 'mimetypes:video/webm,video/mp4,audio/webm', 'max:20480']
+                : ['required', 'file', 'mimes:jpg,jpeg', 'max:4096'],
+            'kind' => ['nullable', 'string', 'in:photo,video'],
             'filter' => ['required', 'string', 'in:none,film,vhs,bw,polaroid'],
             'selfie' => ['required', 'boolean'],
             'where' => ['nullable', 'string', 'max:120'],
             'space_id' => ['nullable', 'integer'],
+            'w' => [$video ? 'required' : 'nullable', 'integer', 'min:16', 'max:2400'],
+            'h' => [$video ? 'required' : 'nullable', 'integer', 'min:16', 'max:2400'],
+            'secs' => [$video ? 'required' : 'nullable', 'integer', 'min:0', 'max:60'],
         ]);
         abort_if(YutopiaPhoto::where('user_id', $user->id)->count() >= YutopiaPhoto::QUOTA, 422, 'Your gallery is full — delete a few first.');
         $file = $request->file('file');
-        $size = @getimagesize($file->getRealPath()) ?: [0, 0];
-        abort_if($size[0] < 16 || $size[1] < 16 || max($size[0], $size[1]) > 2400, 422, 'Not a photo from the phone.');
+        if ($video) {
+            $size = [(int) $data['w'], (int) $data['h']];
+            $mime = str_contains((string) $file->getMimeType(), 'mp4') ? 'video/mp4' : 'video/webm';
+        } else {
+            $size = @getimagesize($file->getRealPath()) ?: [0, 0];
+            abort_if($size[0] < 16 || $size[1] < 16 || max($size[0], $size[1]) > 2400, 422, 'Not a photo from the phone.');
+            $mime = 'image/jpeg';
+        }
         $space = isset($data['space_id']) ? YutopiaSpace::with('project')->find($data['space_id']) : null;
-        $path = $file->storeAs('yutopia/photos/'.$user->id, Str::uuid().'.jpg', 'local');
+        $ext = $mime === 'video/mp4' ? 'mp4' : ($video ? 'webm' : 'jpg');
+        $path = $file->storeAs('yutopia/photos/'.$user->id, Str::uuid().'.'.$ext, 'local');
         $photo = YutopiaPhoto::create([
             'user_id' => $user->id,
             'space_id' => $space && $space->isAccessibleBy($user->id) ? $space->id : null,
@@ -247,9 +292,34 @@ class YutopiaPhoneController extends Controller
             'filter' => $data['filter'],
             'selfie' => (bool) $data['selfie'],
             'where' => (string) ($data['where'] ?? ''),
+            'kind' => $video ? 'video' : 'photo',
+            'mime' => $mime,
+            'secs' => (int) ($data['secs'] ?? 0),
         ]);
 
         return response()->json(['photo' => $photo->toPhone()], 201);
+    }
+
+    // a photo (or video) someone sent me: a copy of my own in my Gallery
+    public function keep(Request $request, int $photoId): JsonResponse
+    {
+        $user = $request->user();
+        $src = YutopiaPhoto::findOrFail($photoId);
+        if ($src->user_id === $user->id) {
+            return response()->json(['photo' => $src->toPhone()]);
+        }
+        $seen = YutopiaMessage::where('photo_id', $src->id)->pluck('thread_id')->unique()
+            ->contains(fn ($tid) => ($t = YutopiaThread::with('space.project')->find($tid)) && $this->phone->canSee($t, $user->id));
+        abort_unless($seen, 404);
+        abort_if(YutopiaPhoto::where('user_id', $user->id)->count() >= YutopiaPhoto::QUOTA, 422, 'Your gallery is full — delete a few first.');
+        $disk = Storage::disk('local');
+        abort_unless($disk->exists($src->path), 404);
+        $path = 'yutopia/photos/'.$user->id.'/'.Str::uuid().'.'.pathinfo($src->path, PATHINFO_EXTENSION);
+        $disk->copy($src->path, $path);
+        $copy = $src->replicate(['sent']);
+        $copy->fill(['user_id' => $user->id, 'path' => $path, 'sent' => false])->save();
+
+        return response()->json(['photo' => $copy->toPhone()], 201);
     }
 
     public function editPhoto(Request $request, int $photoId): JsonResponse
@@ -277,7 +347,7 @@ class YutopiaPhoneController extends Controller
         $disk = Storage::disk('local');
         abort_unless($disk->exists($p->path), 404);
 
-        return $disk->response($p->path, null, ['Content-Type' => 'image/jpeg', 'Cache-Control' => 'private, max-age=604800']);
+        return $disk->response($p->path, null, ['Content-Type' => $p->mime ?: 'image/jpeg', 'Cache-Control' => 'private, max-age=604800', 'Accept-Ranges' => 'bytes']);
     }
 
     // ── Vortex ──────────────────────────────────────────────────────────────

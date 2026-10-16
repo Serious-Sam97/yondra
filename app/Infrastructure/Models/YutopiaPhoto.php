@@ -10,7 +10,7 @@ class YutopiaPhoto extends Model
 {
     public const QUOTA = 300; // shared/phone.ts PHOTO_QUOTA
 
-    protected $fillable = ['user_id', 'space_id', 'path', 'w', 'h', 'bytes', 'filter', 'selfie', 'sent', 'where'];
+    protected $fillable = ['user_id', 'space_id', 'path', 'w', 'h', 'bytes', 'filter', 'selfie', 'sent', 'where', 'kind', 'mime', 'secs'];
 
     protected $casts = ['selfie' => 'boolean', 'sent' => 'boolean'];
 
@@ -33,6 +33,9 @@ class YutopiaPhoto extends Model
             'at' => $this->created_at->getTimestampMs(),
             'selfie' => $this->selfie,
             'sent' => $this->sent,
+            'kind' => $this->kind ?? 'photo',
+            'secs' => (int) ($this->secs ?? 0),
+            'user_id' => $this->user_id,
         ];
     }
 }

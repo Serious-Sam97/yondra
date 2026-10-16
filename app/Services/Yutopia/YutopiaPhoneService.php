@@ -6,6 +6,7 @@ use App\Events\YutopiaPhoneEvent;
 use App\Infrastructure\Models\Project;
 use App\Infrastructure\Models\User;
 use App\Infrastructure\Models\YutopiaAvatar;
+use App\Infrastructure\Models\YutopiaContact;
 use App\Infrastructure\Models\YutopiaMessage;
 use App\Infrastructure\Models\YutopiaPhone;
 use App\Infrastructure\Models\YutopiaSpace;
@@ -88,7 +89,7 @@ class YutopiaPhoneService
         ];
     }
 
-    // ── the team ────────────────────────────────────────────────────────────
+    // ── people ──────────────────────────────────────────────────────────────
     /** Everyone the user shares a project with (not themself). @return Collection<int, User> */
     public function team(User $user): Collection
     {
@@ -105,29 +106,80 @@ class YutopiaPhoneService
         return $this->team($user)->contains('id', $otherId);
     }
 
-    /** Contacts with where they are right now (every space's presence). */
+    /** My phone book: the people I added (by their user id), with where they are right now. */
     public function contacts(User $user, ?int $hereSpaceId): array
     {
-        $team = $this->team($user);
-        $looks = YutopiaAvatar::whereIn('user_id', $team->pluck('id'))->pluck('layers', 'user_id');
-        $where = [];
-        foreach ($this->spaces->forUser($user) as $space) {
+        $ids = YutopiaContact::where('user_id', $user->id)->pluck('contact_id');
+
+        return $this->people(User::whereIn('id', $ids)->get(['id', 'name']), $user, $hereSpaceId);
+    }
+
+    /** One person as the phone shows them (a lookup by id, or a contact). */
+    public function person(User $u, User $viewer, ?int $hereSpaceId = null): array
+    {
+        return $this->people(collect([$u]), $viewer, $hereSpaceId)[0];
+    }
+
+    public function isContact(User $user, int $otherId): bool
+    {
+        return YutopiaContact::where('user_id', $user->id)->where('contact_id', $otherId)->exists();
+    }
+
+    /** Whom I may text or call: my contacts, and anyone I already have a conversation with. */
+    public function reachable(User $user, int $otherId): bool
+    {
+        if ($this->isContact($user, $otherId)) {
+            return true;
+        }
+        $key = min($user->id, $otherId).':'.max($user->id, $otherId);
+
+        return YutopiaThread::where('direct_key', $key)->exists();
+    }
+
+    /** @param Collection<int, User> $users */
+    private function people(Collection $users, User $viewer, ?int $hereSpaceId): array
+    {
+        $looks = YutopiaAvatar::whereIn('user_id', $users->pluck('id'))->pluck('layers', 'user_id');
+        $where = $this->whereabouts($viewer);
+
+        return $users->map(function (User $u) use ($looks, $where, $hereSpaceId) {
+            $w = $where[$u->id] ?? null;
+
+            return [
+                'uid' => $u->id,
+                'name' => $u->name,
+                'avatar' => json_encode(array_merge(YutopiaSpaces::DEFAULT_AVATAR, $looks[$u->id] ?? [])),
+                'online' => $w !== null,
+                'spaceId' => $w['spaceId'] ?? null,
+                'space' => $w['space'] ?? null,
+                'area' => $w['area'] ?? null,
+                'status' => $w['status'] ?? 'offline',
+                'here' => $w !== null && $hereSpaceId !== null && ($w['spaceId'] ?? null) === $hereSpaceId,
+            ];
+        })->sortBy([['online', 'desc'], ['name', 'asc']])->values()->all();
+    }
+
+    /** Who's in Yutopia now and where: the space (and room) only when the viewer can open that space. */
+    private function whereabouts(User $viewer): array
+    {
+        $mine = $this->spaces->forUser($viewer)->pluck('id')->flip();
+        $out = [];
+        foreach (YutopiaSpace::all(['id', 'name', 'project_id']) as $space) {
             foreach ($this->presence->get($space)['people'] as $p) {
-                // the space someone's in that I can see (the first one wins)
-                $where[$p['userId']] ??= ['spaceId' => $space->id, 'space' => $space->name, 'area' => $p['areaName'] ?? null, 'status' => $p['status'] ?? 'online'];
+                $visible = isset($mine[$space->id]);
+                if (isset($out[$p['userId']]) && ! $visible) {
+                    continue;
+                }
+                $out[$p['userId']] = [
+                    'spaceId' => $visible ? $space->id : null,
+                    'space' => $visible ? $space->name : null,
+                    'area' => $visible ? ($p['areaName'] ?? null) : null,
+                    'status' => $p['status'] ?? 'online',
+                ];
             }
         }
 
-        return $team->map(fn (User $u) => [
-            'uid' => $u->id,
-            'name' => $u->name,
-            'avatar' => json_encode(array_merge(YutopiaSpaces::DEFAULT_AVATAR, $looks[$u->id] ?? [])),
-            'online' => isset($where[$u->id]),
-            'spaceId' => $where[$u->id]['spaceId'] ?? null,
-            'space' => $where[$u->id]['space'] ?? null,
-            'area' => $where[$u->id]['area'] ?? null,
-            'status' => $where[$u->id]['status'] ?? 'offline',
-        ])->sortBy([['online', 'desc'], ['name', 'asc']])->values()->all();
+        return $out;
     }
 
     // ── threads ─────────────────────────────────────────────────────────────
@@ -174,7 +226,7 @@ class YutopiaPhoneService
     }
 
     /** Who is in a thread (user ids): its members, or for a space thread everyone who can open the space. @return int[] */
-    public function people(YutopiaThread $t): array
+    public function inThread(YutopiaThread $t): array
     {
         if ($t->kind === 'space') {
             $project = $t->space?->project;
@@ -232,11 +284,19 @@ class YutopiaPhoneService
             default => '',
         };
 
+        // who they are (a name and a face for people not in my contacts)
+        $looks = YutopiaAvatar::whereIn('user_id', $members)->pluck('layers', 'user_id');
+        $who = User::whereIn('id', $members)->get(['id', 'name'])->mapWithKeys(fn (User $u) => [$u->id => [
+            'name' => $u->name,
+            'avatar' => json_encode(array_merge(YutopiaSpaces::DEFAULT_AVATAR, $looks[$u->id] ?? [])),
+        ]]);
+
         return [
             'id' => $t->id,
             'kind' => $t->kind,
             'name' => (string) $name,
             'members' => $members,
+            'who' => (object) $who->all(),
             'space_id' => $t->space_id,
             'unread' => min(99, $unread),
             'last' => $last ? $this->shapeMessage($last) : null,
@@ -280,7 +340,7 @@ class YutopiaPhoneService
         }
         $m->load('photo');
         $shaped = $this->shapeMessage($m);
-        foreach ($this->people($t) as $uid) {
+        foreach ($this->inThread($t) as $uid) {
             if ($uid === $from && ($data['kind'] ?? 'text') !== 'call') {
                 continue;
             }
@@ -305,7 +365,7 @@ class YutopiaPhoneService
 
     public function pushAll(YutopiaThread $t, array $payload, ?int $except = null): void
     {
-        foreach ($this->people($t) as $uid) {
+        foreach ($this->inThread($t) as $uid) {
             if ($uid !== $except) {
                 $this->push($uid, $payload);
             }
