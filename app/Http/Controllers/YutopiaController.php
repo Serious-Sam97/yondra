@@ -90,7 +90,8 @@ class YutopiaController extends Controller
             'body' => $slug, 'skin' => $hex, 'hair' => $slug, 'hairColor' => $hex,
             'top' => $slug, 'topColor' => $hex, 'bottom' => $slug, 'bottomColor' => $hex,
             'accessory' => $slug, 'accessoryColor' => $hex,
-            // drawing style: City-pop 80s anime (default) or Ligne claire
+            // drawing style: Ligne claire only now — City-pop (from a browser
+            // still open on the old editor) is taken and saved as Ligne claire
             'style' => ['sometimes', 'string', 'in:citypop,ligne'],
             // body and face shape only; neutral keeps the original figure
             'gender' => ['sometimes', 'string', 'in:neutral,feminine,masculine'],
@@ -98,7 +99,10 @@ class YutopiaController extends Controller
             'eyewear' => ['sometimes', ...$slug], 'eyewearColor' => ['sometimes', ...$hex],
             'extra' => ['sometimes', ...$slug], 'extraColor' => ['sometimes', ...$hex],
             'shoes' => ['sometimes', ...$slug], 'shoesColor' => ['sometimes', ...$hex],
+            // facial hair, in the hair's colour
+            'beard' => ['sometimes', ...$slug],
         ]);
+        $layers['style'] = 'ligne';
         YutopiaAvatar::updateOrCreate(['user_id' => $request->user()->id], ['layers' => $layers]);
 
         return response()->json(['avatar' => $this->spaces->avatarFor($request->user())]);

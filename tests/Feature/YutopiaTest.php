@@ -16,6 +16,7 @@ use App\Services\Yutopia\YutopiaSpaces;
 use App\Services\Yutopia\YutopiaTokens;
 use App\Services\Yutopia\YutopiaVortex;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 
@@ -105,17 +106,44 @@ it('saves and validates avatars', function () {
     $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['skin' => 'red'] + $layers)->assertUnprocessable();
     $this->actingAs($ana)->putJson('/api/yutopia/avatar', $layers)->assertOk()->assertJsonPath('avatar.hair', 'curly');
     $this->actingAs($ana)->getJson('/api/yutopia/avatar')->assertJsonPath('avatar.accessory', 'headphones')
-        ->assertJsonPath('avatar.style', 'citypop')->assertJsonPath('avatar.gender', 'neutral');
+        ->assertJsonPath('avatar.style', 'ligne')->assertJsonPath('avatar.gender', 'neutral');
     $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['gender' => 'other'] + $layers)->assertUnprocessable();
     $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['gender' => 'feminine'] + $layers)->assertOk()->assertJsonPath('avatar.gender', 'feminine');
     $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['style' => 'pixel'] + $layers)->assertUnprocessable();
     $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['style' => 'ligne'] + $layers)->assertOk()->assertJsonPath('avatar.style', 'ligne');
+    // City-pop is gone: an old editor still sending it saves Ligne claire
+    $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['style' => 'citypop'] + $layers)->assertOk()->assertJsonPath('avatar.style', 'ligne');
     // glasses, one more thing and shoes: optional slots, defaulted when missing
     $this->actingAs($ana)->getJson('/api/yutopia/avatar')->assertJsonPath('avatar.shoes', 'sneakers')->assertJsonPath('avatar.eyewear', 'none');
     $more = ['eyewear' => 'sunglasses', 'eyewearColor' => '#2a2420', 'extra' => 'scarf', 'extraColor' => '#b5562f', 'shoes' => 'boots', 'shoesColor' => '#5b3a26'];
     $this->actingAs($ana)->putJson('/api/yutopia/avatar', $more + $layers)->assertOk()
         ->assertJsonPath('avatar.extra', 'scarf')->assertJsonPath('avatar.shoes', 'boots')->assertJsonPath('avatar.eyewear', 'sunglasses');
     $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['shoesColor' => 'brown'] + $more + $layers)->assertUnprocessable();
+    // facial hair: optional, "none" when missing; a plain slug
+    $this->actingAs($ana)->getJson('/api/yutopia/avatar')->assertJsonPath('avatar.beard', 'none');
+    $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['beard' => 'goatee', 'hair' => 'crew'] + $more + $layers)->assertOk()
+        ->assertJsonPath('avatar.beard', 'goatee')->assertJsonPath('avatar.hair', 'crew');
+    $this->actingAs($ana)->putJson('/api/yutopia/avatar', ['beard' => '<b>'] + $more + $layers)->assertUnprocessable();
+});
+
+it('moves City-pop avatars to Ligne claire', function () {
+    $ana = User::factory()->create();
+    $bia = User::factory()->create();
+    $cai = User::factory()->create();
+    $base = ['body' => 'regular', 'skin' => '#aa8866', 'hair' => 'bob', 'hairColor' => '#111111', 'top' => 'tee', 'topColor' => '#556b2f',
+        'bottom' => 'jeans', 'bottomColor' => '#222222', 'accessory' => 'none', 'accessoryColor' => '#e8a33d'];
+    DB::table('yutopia_avatars')->insert([
+        ['user_id' => $ana->id, 'layers' => json_encode(['style' => 'citypop'] + $base), 'created_at' => now(), 'updated_at' => now()],
+        ['user_id' => $bia->id, 'layers' => json_encode(['style' => 'ligne'] + $base), 'created_at' => now(), 'updated_at' => now()],
+        ['user_id' => $cai->id, 'layers' => json_encode($base), 'created_at' => now(), 'updated_at' => now()],
+    ]);
+
+    (require database_path('migrations/2026_10_17_000003_avatars_to_ligne_claire.php'))->up();
+
+    foreach ([$ana, $bia, $cai] as $user) {
+        $layers = json_decode(DB::table('yutopia_avatars')->where('user_id', $user->id)->value('layers'), true);
+        expect($layers['style'])->toBe('ligne')->and($layers['hair'])->toBe('bob');
+    }
 });
 
 it('rejects unsigned internal calls', function () {
